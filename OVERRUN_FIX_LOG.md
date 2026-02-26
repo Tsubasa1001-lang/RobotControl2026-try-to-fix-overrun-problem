@@ -2,7 +2,8 @@
 
 **修復日期**：2026-02-26  
 **專案**：RobotControl2026  
-**問題**：機器人執行動作時出現延遲 / WPILib Loop Overrun 警告
+**問題**：機器人執行動作時出現延遲 / WPILib Loop Overrun 警告  
+**最後更新**：2026-02-26
 
 ---
 
@@ -318,3 +319,190 @@ edu.wpi.first.wpilibj.Tracer.resetTimer();
 // ... 你的程式碼 ...
 edu.wpi.first.wpilibj.Tracer.printEpochs(); // 印出各段耗時
 ```
+
+---
+
+## 後續優化與功能新增（Overrun 修復後）
+
+以下修改是在 Overrun 問題修復之後，進一步針對速度、功能、穩定性所做的優化。
+
+---
+
+### 優化 6 — 速度控制鏈重構
+
+**問題**：機器人最大速度只有 2 m/s，遠低於 MK4i L3 的物理極限 5.13 m/s
+
+| 項目 | 內容 |
+|------|------|
+| **影響檔案** | `Constants.java`, `ManualDrive.java`, `Swerve.java`, `SwerveModuleKraken.java` |
+| **修復類型** | 性能優化 |
+
+**修改內容**：
+
+1. **Constants.java** — 新增物理最大速度常數：
+   ```java
+   public static final double kMaxPhysicalSpeedMps = 
+       (6000.0 / 60.0 / kThrottleGearRatio) * kWheelDiameterMeters * Math.PI;
+   // ≈ 5.13 m/s
+   ```
+
+2. **ManualDrive.java** — 搖桿輸出改用物理最大速度：
+   - `xCtl *= SwerveConstants.kMaxPhysicalSpeedMps`（取代舊的 `×6.0`）
+   - `yCtl *= SwerveConstants.kMaxPhysicalSpeedMps`
+   - `zCtl *= SwerveConstants.kMaxPhysicalSpeedMps`
+
+3. **Swerve.java** — `getMaxVelocity()` 改用 `kMaxPhysicalSpeedMps`（取代硬編碼 2）
+
+4. **SwerveModuleKraken.java** — `setThrottleSpeed()` 使用 `kMaxPhysicalSpeedMps` 計算百分比
+
+---
+
+### 優化 7 — TrapezoidProfile → SlewRateLimiter
+
+**問題**：TrapezoidProfile 被誤用 — 將速度值當作「位置」輸入，目標速度設為 0，導致中途減速
+
+| 項目 | 內容 |
+|------|------|
+| **檔案** | `Swerve.java` |
+| **修復類型** | Bug 修復 + 性能優化 |
+
+**修改前**：
+```java
+TrapezoidProfile xProfile = new TrapezoidProfile(new Constraints(10, 10));
+// 每次呼叫: xProfile.calculate(0.02, new State(targetSpeed, 0), new State(0, 0))
+// 問題：把 targetSpeed 當「位置」，目標位置=0，所以永遠在減速到停
+```
+
+**修改後**：
+```java
+SlewRateLimiter xSpeedLimiter = new SlewRateLimiter(20); // 20 m/s² 加速度限制
+SlewRateLimiter ySpeedLimiter = new SlewRateLimiter(20);
+SlewRateLimiter zSpeedLimiter = new SlewRateLimiter(15); // 旋轉 15 rad/s²
+```
+
+**效果**：加速度響應正確，不再提前減速，vx 可達 5.13 m/s。
+
+---
+
+### 優化 8 — 模擬器支援
+
+| 項目 | 內容 |
+|------|------|
+| **影響檔案** | `build.gradle`, `SwerveModuleKraken.java`, `Swerve.java`, `Robot.java` |
+| **修復類型** | 開發工具 |
+
+**修改內容**：
+- `build.gradle`: `includeDesktopSupport = true`
+- `SwerveModuleKraken.java`: 新增 sim 物理追蹤（simThrottlePosition/Velocity）
+- `Swerve.java`: sim gyro 角度積分、Field2d 顯示、`setStateCommand` 移至 `periodic()`
+- `Robot.java`: Loop 計時監控（CurrentMs、MaxMs、Overrun 指示器）
+- `SwerveModuleKraken.java`: `RuntimeException` → `DriverStation.reportWarning`
+
+---
+
+### 優化 9 — IMU 與位姿同步
+
+**問題**：自動模式結束後需手動按 Button 8 重新校正 IMU
+
+| 項目 | 內容 |
+|------|------|
+| **檔案** | `Swerve.java`, `RobotContainer.java` |
+| **修復類型** | Bug 修復 |
+
+**根因**：
+1. `resetPose()` 只重設 poseEstimator，沒有同步 Pigeon2 yaw
+2. `resetIMU()` 只重設 Pigeon2，沒有同步 poseEstimator
+3. 視覺融合的角度 stddev 為 999999（完全不修正角度）
+
+**修改內容**：
+
+1. **`resetPose(Pose2d)`** — PathPlanner auto 開始時呼叫，現在會**同步設定 IMU yaw** 為目標位姿角度
+2. **`resetIMU(double)`** — 手動重設 IMU 後，同步**更新 poseEstimator 航向**
+3. **`resetPoseToLimelight()`** — 改為只校正 XY 位置，**角度保持 IMU**（因使用者不信任 Limelight 角度）
+4. **`teleopInit()`** — 進入 teleop 時自動呼叫 `resetPoseToLimelight()` 校正 XY
+
+---
+
+### 新功能 10 — AutoAimAndShoot 指令
+
+| 項目 | 內容 |
+|------|------|
+| **新增檔案** | `commands/AutoAimAndShoot.java` |
+| **修改檔案** | `Constants.java`, `ShooterSubsystem.java`, `TransportSubsystem.java`, `RobotContainer.java` |
+
+**功能說明**：
+按住 Left Bumper 時：
+1. 自動旋轉底盤面向 Speaker（PID 控制，kP=5.0）
+2. 依距離線性內插查表調整射手 RPS（1m=40RPS ~ 5m=80RPS）
+3. 角度對齊 (±2°) + 射手達速 → 自動啟動 Transport 送球
+4. 透過 `setAimSpeed()` 疊加旋轉，不影響手動平移控制
+
+**新增 Constants (`AutoAimConstants`)**：
+- 藍方 Speaker 座標: `(0.0, 5.55)`
+- 紅方 Speaker 座標: `(16.54, 5.55)`
+- 距離-RPS 對照表：5 組數據點
+
+**新增 Subsystem 方法**：
+- `ShooterSubsystem`: `setTargetVelocity(rps)`, `stopShooter()`, `getCurrentRps()`
+- `TransportSubsystem`: `runTransport()`, `stopTransport()`
+
+---
+
+### 優化 11 — Intake 改為閉環轉速控制
+
+**問題**：Intake 使用 DutyCycleOut(0.4)，只給 40% 電壓，遇阻力時力量不足
+
+| 項目 | 內容 |
+|------|------|
+| **檔案** | `IntakeRollerSubsystem.java` |
+| **修復類型** | 性能優化 |
+
+**修改前**：
+```java
+// DutyCycleOut 開環百分比控制
+private final DutyCycleOut voltageRequest = new DutyCycleOut(0);
+private final double MAX_OUTPUT = 0.4; // 只給 40% 電壓
+
+setSpeed(MAX_OUTPUT); // 固定輸出，遇阻力轉速下降
+```
+
+**修改後**：
+```java
+// VelocityVoltage 閉環轉速控制
+private final VelocityVoltage velocityRequest = new VelocityVoltage(0);
+private static final double INTAKE_TARGET_RPS = 60.0;
+
+// PID 設定 (X44 馬達)
+config.Slot0.kV = 0.12;  // 前饋
+config.Slot0.kP = 0.2;   // 比例
+config.Slot0.kI = 0.01;  // 積分
+
+setVelocity(INTAKE_TARGET_RPS); // 閉環控制，遇阻力自動補償電壓
+```
+
+**效果**：
+- 不再限制最大電壓（由 PID 自動決定）
+- 遇到阻力時自動加大電壓維持轉速
+- 電流限制：Stator 60A + Supply 40A（保護馬達）
+- 新增 Dashboard 監控：`Intake/Actual RPS`, `Intake/Leader Current`
+
+---
+
+## 完整修改檔案清單
+
+| # | 檔案 | 修改類型 |
+|---|------|----------|
+| 1 | `Swerve.java` | Overrun 修復 + SlewRateLimiter + IMU 同步 + Limelight 校正 + sim |
+| 2 | `SwerveModule.java` | CAN 讀取快取 |
+| 3 | `SwerveModuleKraken.java` | kMaxPhysicalSpeedMps + sim 物理 + 錯誤處理 |
+| 4 | `LightPollution.java` | LED 更新降頻 |
+| 5 | `DriveSubsystem.java` | 移除重複 AutoBuilder |
+| 6 | `RobotContainer.java` | Command 工廠方法 + AutoAimAndShoot 綁定 + teleopInit 校正 |
+| 7 | `Constants.java` | kMaxPhysicalSpeedMps + AutoAimConstants |
+| 8 | `ManualDrive.java` | 速度乘數改用 kMaxPhysicalSpeedMps |
+| 9 | `ShooterSubsystem.java` | 新增 setTargetVelocity / stopShooter / getCurrentRps |
+| 10 | `TransportSubsystem.java` | 新增 runTransport / stopTransport |
+| 11 | `AutoAimAndShoot.java` | 🆕 自動瞄準射擊 Command |
+| 12 | `IntakeRollerSubsystem.java` | DutyCycleOut → VelocityVoltage 閉環控制 |
+| 13 | `Robot.java` | Loop 計時監控 |
+| 14 | `build.gradle` | includeDesktopSupport = true |
