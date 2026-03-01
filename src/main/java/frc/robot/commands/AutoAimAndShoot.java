@@ -9,6 +9,7 @@ import frc.robot.Constants.AutoAimConstants;
 import frc.robot.subsystems.ShooterSubsystem;
 import frc.robot.subsystems.Swerve;
 import frc.robot.subsystems.TransportSubsystem;
+import frc.robot.util.TunableNumber;
 
 /**
  * 自動瞄準並射擊的 Command
@@ -29,6 +30,11 @@ public class AutoAimAndShoot extends Command {
 
     // 旋轉 PID 控制器
     private final PIDController m_rotationPID;
+
+    // ── Glass 即時調參 ──
+    private final TunableNumber tunableRotKP = new TunableNumber("AutoAim/Rotation kP", AutoAimConstants.kRotation_kP);
+    private final TunableNumber tunableRotKI = new TunableNumber("AutoAim/Rotation kI", AutoAimConstants.kRotation_kI);
+    private final TunableNumber tunableRotKD = new TunableNumber("AutoAim/Rotation kD", AutoAimConstants.kRotation_kD);
 
     // 目標位置
     private Translation2d m_targetPosition;
@@ -77,6 +83,11 @@ public class AutoAimAndShoot extends Command {
 
     @Override
     public void execute() {
+        // ── 即時 PID 調參 ──
+        if (tunableRotKP.hasChanged() || tunableRotKI.hasChanged() || tunableRotKD.hasChanged()) {
+            m_rotationPID.setPID(tunableRotKP.get(), tunableRotKI.get(), tunableRotKD.get());
+        }
+
         // 1. 取得機器人目前位置
         Pose2d robotPose = m_swerve.getPose();
         Translation2d robotPosition = robotPose.getTranslation();

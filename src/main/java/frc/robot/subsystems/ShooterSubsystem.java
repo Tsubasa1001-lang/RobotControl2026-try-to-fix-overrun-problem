@@ -2,6 +2,7 @@ package frc.robot.subsystems;
 
 import java.util.function.DoubleSupplier;
 
+import com.ctre.phoenix6.configs.Slot0Configs;
 import com.ctre.phoenix6.configs.TalonFXConfiguration;
 import com.ctre.phoenix6.controls.Follower;
 import com.ctre.phoenix6.controls.VelocityVoltage;
@@ -13,6 +14,7 @@ import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
 import com.ctre.phoenix6.signals.MotorAlignmentValue;
+import frc.robot.util.TunableNumber;
 
 public class ShooterSubsystem extends SubsystemBase {
     private final TalonFX leaderMotor;
@@ -23,6 +25,12 @@ public class ShooterSubsystem extends SubsystemBase {
     
     private final double TRIGGER_DEADBAND = 0.05; 
 
+    // ── Glass 即時調參 ──
+    private final TunableNumber tunableKV = new TunableNumber("Shooter/kV", 0.12);
+    private final TunableNumber tunableKP = new TunableNumber("Shooter/kP", 0.12);
+    private final TunableNumber tunableKI = new TunableNumber("Shooter/kI", 0.0);
+    private final TunableNumber tunableKD = new TunableNumber("Shooter/kD", 0.0);
+
     public ShooterSubsystem() {
         leaderMotor = new TalonFX(22);
         // followerMotor = new TalonFX(21);
@@ -31,8 +39,10 @@ public class ShooterSubsystem extends SubsystemBase {
         config.MotorOutput.NeutralMode = NeutralModeValue.Coast;
         
         // 記得填入你透過 Tuner X 測出的 PID 數值，否則閉環控制不會動
-        config.Slot0.kV = 0.12; 
-        config.Slot0.kP = 0.12; 
+        config.Slot0.kV = tunableKV.get(); 
+        config.Slot0.kP = tunableKP.get();
+        config.Slot0.kI = tunableKI.get();
+        config.Slot0.kD = tunableKD.get();
 
         leaderMotor.getConfigurator().apply(config);
         // followerMotor.getConfigurator().apply(config);
@@ -129,6 +139,23 @@ public class ShooterSubsystem extends SubsystemBase {
 
     @Override
     public void periodic() {
-        // SmartDashboard.putNumber("Shooter/Current RPS", leaderMotor.getVelocity().getValueAsDouble());
+        // ── 即時 PID 調參：偵測 Glass 上的數值變更，自動套用到馬達 ──
+        if (tunableKV.hasChanged() || tunableKP.hasChanged() 
+            || tunableKI.hasChanged() || tunableKD.hasChanged()) {
+            var newSlot0 = new Slot0Configs();
+            newSlot0.kV = tunableKV.get();
+            newSlot0.kP = tunableKP.get();
+            newSlot0.kI = tunableKI.get();
+            newSlot0.kD = tunableKD.get();
+            leaderMotor.getConfigurator().apply(newSlot0);
+        }
+
+        // ── 遙測數據：在 Glass 上觀察實際表現 ──
+        SmartDashboard.putNumber("Shooter/Current RPS", leaderMotor.getVelocity().getValueAsDouble());
+        SmartDashboard.putNumber("Shooter/Target RPS", velocityRequest.Velocity);
+        SmartDashboard.putNumber("Shooter/Error RPS", 
+            velocityRequest.Velocity - leaderMotor.getVelocity().getValueAsDouble());
+        SmartDashboard.putNumber("Shooter/Output Voltage", leaderMotor.getMotorVoltage().getValueAsDouble());
+        SmartDashboard.putNumber("Shooter/Stator Current", leaderMotor.getStatorCurrent().getValueAsDouble());
     }
 }

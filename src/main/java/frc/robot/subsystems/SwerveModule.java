@@ -9,6 +9,7 @@ import edu.wpi.first.math.trajectory.TrapezoidProfile;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.math.controller.ProfiledPIDController;
 import frc.robot.Constants.SwerveConstants;
+import frc.robot.util.TunableNumber;
 
 public abstract class SwerveModule {
     protected static final boolean ENABLE_OUTPUT = true;
@@ -25,6 +26,11 @@ public abstract class SwerveModule {
     private RelativeEncoder mRotorRelativeEncoder;
 
     private boolean mUseAbsoluteEncoder = false;
+
+    // ── Glass 即時調參（靜態，所有 SwerveModule 共用同一組 PID 參數） ──
+    private static final TunableNumber tunableRotorKP = new TunableNumber("Swerve/Rotor kP", SwerveConstants.kRotor_kP);
+    private static final TunableNumber tunableRotorKI = new TunableNumber("Swerve/Rotor kI", SwerveConstants.kRotor_kI);
+    private static final TunableNumber tunableRotorKD = new TunableNumber("Swerve/Rotor kD", SwerveConstants.kRotor_kD);
 
     // Construct swerve module with relative encoder
     public SwerveModule(int throttleID, int rotorID, boolean throttleInverted, boolean rotorInverted, String location) {
@@ -119,6 +125,9 @@ public abstract class SwerveModule {
         // SmartDashboard.putNumber("Rotor Target " + location, state.angle.getDegrees());
         // SmartDashboard.putNumber("Throttle Target " + location, state.speedMetersPerSecond);
 
+        // ── 檢查 Glass 即時調參 ──
+        checkTunableUpdates();
+
         // 只讀一次 CAN，快取角度值，避免重複 CAN 通訊
         Rotation2d currentAngle = getState().angle;
 
@@ -148,6 +157,17 @@ public abstract class SwerveModule {
 
     public void updateSmartDashboard() {
         // SmartDashboard.putNumber("Rotor Angle " + mLocation, getState().angle.getDegrees());
+    }
+
+    /**
+     * 檢查 Glass 上的 Rotor PID 參數是否有變更，有就即時套用。
+     * 由於四個 SwerveModule 共用同一組 TunableNumber（靜態欄位），
+     * 任何一個模組偵測到變更後都會更新自己的 PIDController。
+     */
+    public void checkTunableUpdates() {
+        if (tunableRotorKP.hasChanged() || tunableRotorKI.hasChanged() || tunableRotorKD.hasChanged()) {
+            mRotorPID.setPID(tunableRotorKP.get(), tunableRotorKI.get(), tunableRotorKD.get());
+        }
     }
 
     public void resetPID() {

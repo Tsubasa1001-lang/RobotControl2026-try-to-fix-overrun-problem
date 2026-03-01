@@ -1,5 +1,6 @@
 package frc.robot.subsystems;
 
+import com.ctre.phoenix6.configs.Slot0Configs;
 import com.ctre.phoenix6.configs.TalonFXConfiguration;
 import com.ctre.phoenix6.controls.VelocityVoltage;
 import com.ctre.phoenix6.hardware.TalonFX;
@@ -11,6 +12,7 @@ import com.ctre.phoenix6.controls.Follower;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
+import frc.robot.util.TunableNumber;
 
 
 public class IntakeRollerSubsystem extends SubsystemBase {
@@ -33,6 +35,12 @@ public class IntakeRollerSubsystem extends SubsystemBase {
     private static final double STATOR_CURRENT_LIMIT = 60.0;
     private static final double SUPPLY_CURRENT_LIMIT = 40.0;
 
+    // ── Glass 即時調參 ──
+    private final TunableNumber tunableKV = new TunableNumber("IntakeRoller/kV", 0.12);
+    private final TunableNumber tunableKP = new TunableNumber("IntakeRoller/kP", 0.2);
+    private final TunableNumber tunableKI = new TunableNumber("IntakeRoller/kI", 0.01);
+    private final TunableNumber tunableKD = new TunableNumber("IntakeRoller/kD", 0.0);
+
     public IntakeRollerSubsystem() {
         leaderMotor = new TalonFX(29);
         followerMotor = new TalonFX(35);
@@ -45,10 +53,10 @@ public class IntakeRollerSubsystem extends SubsystemBase {
         //    kP: 比例增益，修正轉速誤差
         //    kI: 積分增益，消除持續性誤差（例如持續的摩擦阻力）
         //    kD: 微分增益，抑制震盪
-        config.Slot0.kV = 0.12;   // 前饋 (需用 Tuner X 精調)
-        config.Slot0.kP = 0.2;    // 比例 — Intake 需要快速反應，比 Shooter 稍大
-        config.Slot0.kI = 0.01;   // 積分 — 小量補償持續阻力
-        config.Slot0.kD = 0.0;
+        config.Slot0.kV = tunableKV.get();
+        config.Slot0.kP = tunableKP.get();
+        config.Slot0.kI = tunableKI.get();
+        config.Slot0.kD = tunableKD.get();
 
         // 2. 電流限制
         config.CurrentLimits.StatorCurrentLimitEnable = true;
@@ -64,10 +72,10 @@ public class IntakeRollerSubsystem extends SubsystemBase {
 
         // 5. Follower 設定
         TalonFXConfiguration followerConfig = new TalonFXConfiguration();
-        followerConfig.Slot0.kV = config.Slot0.kV;
-        followerConfig.Slot0.kP = config.Slot0.kP;
-        followerConfig.Slot0.kI = config.Slot0.kI;
-        followerConfig.Slot0.kD = config.Slot0.kD;
+        followerConfig.Slot0.kV = tunableKV.get();
+        followerConfig.Slot0.kP = tunableKP.get();
+        followerConfig.Slot0.kI = tunableKI.get();
+        followerConfig.Slot0.kD = tunableKD.get();
         followerConfig.CurrentLimits.StatorCurrentLimitEnable = true;
         followerConfig.CurrentLimits.StatorCurrentLimit = STATOR_CURRENT_LIMIT;
         followerConfig.CurrentLimits.SupplyCurrentLimitEnable = true;
@@ -131,8 +139,24 @@ public class IntakeRollerSubsystem extends SubsystemBase {
 
     @Override
     public void periodic() {
-        // 顯示實際轉速與電流，方便在 Dashboard 調整 PID
-        SmartDashboard.putNumber("Intake/Actual RPS", getCurrentRps());
-        SmartDashboard.putNumber("Intake/Leader Current", leaderMotor.getStatorCurrent().getValueAsDouble());
+        // ── 即時 PID 調參：偵測 Glass 上的數值變更，自動套用到馬達 ──
+        if (tunableKV.hasChanged() || tunableKP.hasChanged() 
+            || tunableKI.hasChanged() || tunableKD.hasChanged()) {
+            var newSlot0 = new Slot0Configs();
+            newSlot0.kV = tunableKV.get();
+            newSlot0.kP = tunableKP.get();
+            newSlot0.kI = tunableKI.get();
+            newSlot0.kD = tunableKD.get();
+            leaderMotor.getConfigurator().apply(newSlot0);
+            followerMotor.getConfigurator().apply(newSlot0);
+        }
+
+        // ── 遙測數據 ──
+        SmartDashboard.putNumber("IntakeRoller/Actual RPS", getCurrentRps());
+        SmartDashboard.putNumber("IntakeRoller/Target RPS", velocityRequest.Velocity);
+        SmartDashboard.putNumber("IntakeRoller/Error RPS", 
+            velocityRequest.Velocity - getCurrentRps());
+        SmartDashboard.putNumber("IntakeRoller/Leader Current", leaderMotor.getStatorCurrent().getValueAsDouble());
+        SmartDashboard.putNumber("IntakeRoller/Output Voltage", leaderMotor.getMotorVoltage().getValueAsDouble());
     }
 }
