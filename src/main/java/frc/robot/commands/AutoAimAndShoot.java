@@ -285,30 +285,11 @@ public class AutoAimAndShoot extends Command {
 
     /**
      * 根據距離線性內插查表取得目標 RPS
+     * 委託給 ShooterSubsystem.interpolateRps（共用邏輯）
      * @param distance 到目標的距離 (m)
      * @return 目標射手 RPS
      */
     private double interpolateRps(double distance) {
-        double[][] table = AutoAimConstants.kDistanceToRpsTable;
-
-        // 距離小於表中最小值 → 回傳最小 RPS
-        if (distance <= table[0][0]) {
-            return table[0][1];
-        }
-        // 距離大於表中最大值 → 回傳最大 RPS
-        if (distance >= table[table.length - 1][0]) {
-            return table[table.length - 1][1];
-        }
-
-        // 線性內插
-        for (int i = 0; i < table.length - 1; i++) {
-            if (distance >= table[i][0] && distance <= table[i + 1][0]) {
-                double ratio = (distance - table[i][0]) / (table[i + 1][0] - table[i][0]);
-                return table[i][1] + ratio * (table[i + 1][1] - table[i][1]);
-            }
-        }
-
-        // 理論上不會到這裡
-        return table[table.length - 1][1];
+        return ShooterSubsystem.interpolateRps(distance);
     }
 }

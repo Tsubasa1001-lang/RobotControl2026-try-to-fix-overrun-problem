@@ -108,11 +108,6 @@ public final class Constants {
     public static final int kLeaderMotorID = 22;
     public static final int kFollowerMotorID = 21;
 
-    // ── 速度目標 (RPS) ──
-    public static final int kNearShootRps = 50;    // 近距離射擊 (Auto Shoot / 手動射擊)
-    public static final int kFarShootRps = 62;     // 遠距離射擊 (Far Auto Shoot)
-    public static final double kDefaultTargetRps = 50.0;
-
     // ── PID 初始值 (Slot 0, VelocityVoltage) ──
     // ⚠ 透過 Shuffleboard TunableNumber 可即時調參，這裡是開機預設值
     public static final double kDefaultKV = 0.12;

@@ -5,7 +5,7 @@
 package frc.robot;
 
 import frc.robot.Constants.OperatorConstants;
-import frc.robot.Constants.ShooterConstants;
+import frc.robot.Constants.AutoAimConstants;
 import frc.robot.commands.Drive2Tag;
 import frc.robot.commands.ManualDrive;
 import frc.robot.commands.AutoAimAndShoot;
@@ -16,6 +16,7 @@ import frc.robot.subsystems.IntakeRollerSubsystem;
 import frc.robot.subsystems.Swerve;
 import frc.robot.subsystems.TransportSubsystem;
 import edu.wpi.first.math.geometry.Pose2d;
+import edu.wpi.first.math.geometry.Translation2d;
 
 //import com.pathplanner.lib.auto.AutoBuilder;
 //import com.pathplanner.lib.auto.NamedCommands;
@@ -70,23 +71,29 @@ public class RobotContainer {
 
     private Command autoCommand;
 
-    // 使用工廠方法建立 Command，避免同一個 Command 實例被多處共用
-    // WPILib 的 Command 是有狀態的物件，同一個實例不能同時被兩個 Trigger 使用
-    private Command createAutoShootCommand() {
-        return Commands.parallel(
-            shooterSubsystem.sys_manualShoot(ShooterConstants.kNearShootRps), 
-            Commands.sequence(
-                Commands.waitUntil(() -> shooterSubsystem.isAtSpeed(ShooterConstants.kNearShootRps)).withTimeout(2.0),
-                transport.sys_runTransport().withTimeout(4.0)
-            )
-        ).withTimeout(4.0);
+    // ── 距離自適應輔助方法 ──
+    // 根據機器人目前位置計算到 Hub 的距離，查表取得目標 RPS
+    private double getAdaptiveRps() {
+        var robotPos = swerve.getPose().getTranslation();
+        Translation2d hubPos;
+        if (swerve.isAllianceRed()) {
+            hubPos = new Translation2d(AutoAimConstants.kRedHubX, AutoAimConstants.kRedHubY);
+        } else {
+            hubPos = new Translation2d(AutoAimConstants.kBlueHubX, AutoAimConstants.kBlueHubY);
+        }
+        double distance = hubPos.minus(robotPos).getNorm();
+        return ShooterSubsystem.interpolateRps(distance);
     }
 
-    private Command createFarAutoShootCommand() {
+    // ── 工廠方法：自適應自主射擊 ──
+    // PathPlanner Auto 用：即時計算距離 → 動態調整 RPS → 達速後送球
+    private Command createAutoShootCommand() {
         return Commands.parallel(
-            shooterSubsystem.sys_manualShoot(ShooterConstants.kFarShootRps), 
+            // 持續依距離設定射手速度
+            shooterSubsystem.run(() -> shooterSubsystem.setTargetVelocity(getAdaptiveRps()))
+                .finallyDo(() -> shooterSubsystem.stopShooter()),
             Commands.sequence(
-                Commands.waitUntil(() -> shooterSubsystem.isAtSpeed(ShooterConstants.kFarShootRps)).withTimeout(2.0),
+                Commands.waitUntil(() -> shooterSubsystem.isAtSpeed(getAdaptiveRps(), AutoAimConstants.kShooterToleranceRps)).withTimeout(2.0),
                 transport.sys_runTransport().withTimeout(4.0)
             )
         ).withTimeout(4.0);
@@ -101,7 +108,7 @@ public class RobotContainer {
 
     private Command createShootCommand() {
         return Commands.sequence(
-            Commands.waitUntil(() -> shooterSubsystem.isAtSpeed(ShooterConstants.kNearShootRps)),
+            Commands.waitUntil(() -> shooterSubsystem.isAtSpeed(getAdaptiveRps(), AutoAimConstants.kShooterToleranceRps)),
             transport.sys_runTransport()
         );
     }
@@ -114,10 +121,14 @@ public class RobotContainer {
         
     
         NamedCommands.registerCommand("transport wait shoot", createShootCommand());
-        NamedCommands.registerCommand("shoot work", shooterSubsystem.sys_manualShoot(ShooterConstants.kNearShootRps));
+        // "shoot work"：僅啟動射手（依距離自適應 RPS），不含送球
+        NamedCommands.registerCommand("shoot work",
+            shooterSubsystem.run(() -> shooterSubsystem.setTargetVelocity(getAdaptiveRps()))
+                .finallyDo(() -> shooterSubsystem.stopShooter()));
 
         NamedCommands.registerCommand("Auto Shoot", createAutoShootCommand());
-        NamedCommands.registerCommand("Far Auto Shoot", createFarAutoShootCommand());
+        // "Far Auto Shoot" 不再需要，統一用自適應 "Auto Shoot"
+        NamedCommands.registerCommand("Far Auto Shoot", createAutoShootCommand());
         NamedCommands.registerCommand("Auto Intake", createAutoIntakeCommand());
     
         NamedCommands.registerCommand("Start Intake", 
@@ -252,15 +263,10 @@ public class RobotContainer {
                 )
         );
 
-        // 手動射擊：按住右板機 → 啟動 Shooter 到 50 RPS，達速後自動送球
+        // 手動射擊：按住右板機 → 自動瞄準 + 依距離調整 RPS + 達速對準後自動送球
+        // 與 leftBumper 的 AutoAimAndShoot 功能相同
         driverController.rightTrigger(0.1).whileTrue(
-            Commands.parallel(
-                shooterSubsystem.sys_manualShoot(ShooterConstants.kNearShootRps),
-                Commands.sequence(
-                    Commands.waitUntil(() -> shooterSubsystem.isAtSpeed(ShooterConstants.kNearShootRps)),
-                    transport.sys_runTransport()
-                )
-            )
+            new AutoAimAndShoot(swerve, shooterSubsystem, transport, manualDriveCommand)
         );
             
         // shooterSubsystem.sys_manualShoot(1.0);

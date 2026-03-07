@@ -18,6 +18,7 @@ import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
 import com.ctre.phoenix6.signals.MotorAlignmentValue;
+import frc.robot.Constants.AutoAimConstants;
 import frc.robot.Constants.ShooterConstants;
 import frc.robot.util.TunableNumber;
 
@@ -180,6 +181,36 @@ public class ShooterSubsystem extends SubsystemBase {
      */
     public boolean isAtSpeed(int targetRps) {
         return isAtSpeed(targetRps, 5.0); // 預設容許誤差 5 RPS
+    }
+
+    /**
+     * 根據距離線性內插查表取得目標 RPS
+     * 使用 AutoAimConstants.kDistanceToRpsTable 進行查表
+     * @param distance 到目標的距離 (m)
+     * @return 目標射手 RPS
+     */
+    public static double interpolateRps(double distance) {
+        double[][] table = AutoAimConstants.kDistanceToRpsTable;
+
+        // 距離小於表中最小值 → 回傳最小 RPS
+        if (distance <= table[0][0]) {
+            return table[0][1];
+        }
+        // 距離大於表中最大值 → 回傳最大 RPS
+        if (distance >= table[table.length - 1][0]) {
+            return table[table.length - 1][1];
+        }
+
+        // 線性內插
+        for (int i = 0; i < table.length - 1; i++) {
+            if (distance >= table[i][0] && distance <= table[i + 1][0]) {
+                double ratio = (distance - table[i][0]) / (table[i + 1][0] - table[i][0]);
+                return table[i][1] + ratio * (table[i + 1][1] - table[i][1]);
+            }
+        }
+
+        // 理論上不會到這裡
+        return table[table.length - 1][1];
     }
 
     @Override
