@@ -4,6 +4,7 @@ import edu.wpi.first.util.sendable.SendableBuilder;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.button.CommandXboxController;
+import frc.robot.Constants;
 import frc.robot.Constants.AutoAimConstants;
 import frc.robot.Constants.ManualDriveConstants;
 import frc.robot.Constants.SwerveConstants;
@@ -20,6 +21,7 @@ public class ManualDrive extends Command {
     // 啟用時：鎖定旋轉控制（z=0），降低平移速度
     // AutoAimAndShoot 的 PID 旋轉會透過 setAimSpeed 疊加，不受影響
     private volatile boolean shootingMode = false;
+    private int telemetryCounter = 0;
     
     public ManualDrive(Swerve drive, CommandXboxController joystick) {
         mSwerve = drive;
@@ -46,9 +48,13 @@ public class ManualDrive extends Command {
         // SmartDashboard.putNumber("yCtl", yCtl);
         // SmartDashboard.putNumber("zCtl", zCtl);
         
-        // DEBUG: 原始手把輸入
-        SmartDashboard.putNumber("Raw/LeftY", mJoystick.getLeftY());
-        SmartDashboard.putNumber("Raw/LeftX", mJoystick.getLeftX());
+        // DEBUG: 原始手把輸入（節流輸出）
+        boolean telemetryThisCycle = (++telemetryCounter >= Constants.kTelemetryDivider);
+        if (telemetryThisCycle) {
+            telemetryCounter = 0;
+            SmartDashboard.putNumber("Raw/LeftY", mJoystick.getLeftY());
+            SmartDashboard.putNumber("Raw/LeftX", mJoystick.getLeftX());
+        }
         
         double boostTranslation = mJoystick.rightBumper().getAsBoolean()?1:0.5;
         // double boostTranslation = 1;
@@ -79,11 +85,13 @@ public class ManualDrive extends Command {
         zCtl *= SwerveConstants.kMaxPhysicalSpeedMps;
 
         mSwerve.setSpeed(xCtl, yCtl, zCtl, isFieldOriented);
-        SmartDashboard.putNumber("Drive/xSpeed", xCtl);
-        SmartDashboard.putNumber("Drive/ySpeed", yCtl);
-        SmartDashboard.putNumber("Drive/zSpeed", zCtl);
-        SmartDashboard.putBoolean("Drive/fieldOriented", isFieldOriented);
-        SmartDashboard.putBoolean("Drive/shootingMode", shootingMode);
+        if (telemetryThisCycle) {
+            SmartDashboard.putNumber("Drive/xSpeed", xCtl);
+            SmartDashboard.putNumber("Drive/ySpeed", yCtl);
+            SmartDashboard.putNumber("Drive/zSpeed", zCtl);
+            SmartDashboard.putBoolean("Drive/fieldOriented", isFieldOriented);
+            SmartDashboard.putBoolean("Drive/shootingMode", shootingMode);
+        }
     }
 
     private double calculateNullZone(double input, double nullZone) {

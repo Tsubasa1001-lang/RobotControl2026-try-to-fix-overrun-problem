@@ -18,6 +18,7 @@ import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
 import com.ctre.phoenix6.signals.MotorAlignmentValue;
+import frc.robot.Constants;
 import frc.robot.Constants.AutoAimConstants;
 import frc.robot.Constants.ShooterConstants;
 import frc.robot.util.TunableNumber;
@@ -26,6 +27,7 @@ public class ShooterSubsystem extends SubsystemBase {
     private final TalonFX leaderMotor;
     private final TalonFX followerMotor;
     private final VelocityVoltage velocityRequest = new VelocityVoltage(0);
+    private int telemetryCounter = 0;
 
     // ── Shuffleboard 即時調參 ──
     private TunableNumber tunableKV;
@@ -228,27 +230,31 @@ public class ShooterSubsystem extends SubsystemBase {
             leaderMotor.getConfigurator().apply(newSlot0);
         }
 
-        // ── 遙測數據 ──
-        double currentRps = leaderMotor.getVelocity().getValueAsDouble();
-        double targetRps = velocityRequest.Velocity;
-        double errorRps = targetRps - currentRps;
-        double outputV = leaderMotor.getMotorVoltage().getValueAsDouble();
-        double statorA = leaderMotor.getStatorCurrent().getValueAsDouble();
+        // ── 遙測數據（節流：每 kTelemetryDivider 週期更新一次）──
+        if (++telemetryCounter >= Constants.kTelemetryDivider) {
+            telemetryCounter = 0;
 
-        if (currentRpsEntry != null) {
-            // Shuffleboard 模式
-            currentRpsEntry.setDouble(currentRps);
-            targetRpsEntry.setDouble(targetRps);
-            errorRpsEntry.setDouble(errorRps);
-            outputVoltageEntry.setDouble(outputV);
-            statorCurrentEntry.setDouble(statorA);
-        } else {
-            // SmartDashboard 後備
-            SmartDashboard.putNumber("Shooter/Current RPS", currentRps);
-            SmartDashboard.putNumber("Shooter/Target RPS", targetRps);
-            SmartDashboard.putNumber("Shooter/Error RPS", errorRps);
-            SmartDashboard.putNumber("Shooter/Output Voltage", outputV);
-            SmartDashboard.putNumber("Shooter/Stator Current", statorA);
+            double currentRps = leaderMotor.getVelocity().getValueAsDouble();
+            double targetRps = velocityRequest.Velocity;
+            double errorRps = targetRps - currentRps;
+            double outputV = leaderMotor.getMotorVoltage().getValueAsDouble();
+            double statorA = leaderMotor.getStatorCurrent().getValueAsDouble();
+
+            if (currentRpsEntry != null) {
+                // Shuffleboard 模式
+                currentRpsEntry.setDouble(currentRps);
+                targetRpsEntry.setDouble(targetRps);
+                errorRpsEntry.setDouble(errorRps);
+                outputVoltageEntry.setDouble(outputV);
+                statorCurrentEntry.setDouble(statorA);
+            } else {
+                // SmartDashboard 後備
+                SmartDashboard.putNumber("Shooter/Current RPS", currentRps);
+                SmartDashboard.putNumber("Shooter/Target RPS", targetRps);
+                SmartDashboard.putNumber("Shooter/Error RPS", errorRps);
+                SmartDashboard.putNumber("Shooter/Output Voltage", outputV);
+                SmartDashboard.putNumber("Shooter/Stator Current", statorA);
+            }
         }
     }
 }

@@ -17,6 +17,7 @@ import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
 import com.ctre.phoenix6.signals.MotorAlignmentValue;
+import frc.robot.Constants;
 import frc.robot.Constants.IntakeArmConstants;
 import frc.robot.util.TunableNumber;
 
@@ -27,6 +28,7 @@ public class IntakeArmSubsystem extends SubsystemBase {
     private final TalonFX followerMotor;
 
     private final PositionVoltage positionRequest = new PositionVoltage(0).withSlot(0);
+    private int telemetryCounter = 0;
     private final DutyCycleOut manualRequest = new DutyCycleOut(0);
 
     // ── Shuffleboard 即時調參 ──
@@ -161,22 +163,26 @@ public class IntakeArmSubsystem extends SubsystemBase {
             followerMotor.getConfigurator().apply(newSlot0);
         }
 
-        // ── 遙測數據 ──
-        double motorRotations = leaderMotor.getPosition().getValueAsDouble();
-        double armRotations = motorRotations / IntakeArmConstants.kGearRatio;
-        double outputV = leaderMotor.getMotorVoltage().getValueAsDouble();
-        double statorA = leaderMotor.getStatorCurrent().getValueAsDouble();
+        // ── 遙測數據（節流）──
+        if (++telemetryCounter >= Constants.kTelemetryDivider) {
+            telemetryCounter = 0;
 
-        if (armRotationsEntry != null) {
-            armRotationsEntry.setDouble(armRotations);
-            motorRotationsEntry.setDouble(motorRotations);
-            outputVoltageEntry.setDouble(outputV);
-            statorCurrentEntry.setDouble(statorA);
-        } else {
-            SmartDashboard.putNumber("IntakeArm/Arm Rotations", armRotations);
-            SmartDashboard.putNumber("IntakeArm/Motor Rotations", motorRotations);
-            SmartDashboard.putNumber("IntakeArm/Output Voltage", outputV);
-            SmartDashboard.putNumber("IntakeArm/Stator Current", statorA);
+            double motorRotations = leaderMotor.getPosition().getValueAsDouble();
+            double armRotations = motorRotations / IntakeArmConstants.kGearRatio;
+            double outputV = leaderMotor.getMotorVoltage().getValueAsDouble();
+            double statorA = leaderMotor.getStatorCurrent().getValueAsDouble();
+
+            if (armRotationsEntry != null) {
+                armRotationsEntry.setDouble(armRotations);
+                motorRotationsEntry.setDouble(motorRotations);
+                outputVoltageEntry.setDouble(outputV);
+                statorCurrentEntry.setDouble(statorA);
+            } else {
+                SmartDashboard.putNumber("IntakeArm/Arm Rotations", armRotations);
+                SmartDashboard.putNumber("IntakeArm/Motor Rotations", motorRotations);
+                SmartDashboard.putNumber("IntakeArm/Output Voltage", outputV);
+                SmartDashboard.putNumber("IntakeArm/Stator Current", statorA);
+            }
         }
     }
 }

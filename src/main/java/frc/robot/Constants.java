@@ -26,6 +26,12 @@ import edu.wpi.first.math.util.Units;
 public final class Constants {
   public static final String kLimelightName = "limelight";
 
+  // ===== 遙測節流 =====
+  // Dashboard 更新頻率 = 50Hz / kTelemetryDivider
+  // 5 → 每 5 個週期更新一次 = 10Hz (100ms)，人眼足夠
+  // 比賽時可改更大值（如 10 → 5Hz）進一步減輕網路負擔
+  public static final int kTelemetryDivider = 5;
+
   // ===== 自動瞄準射擊相關常數 =====
   // 2026 REBUILT: 射入 Hub 得分（Fuel 遊戲物件）
   public static final class AutoAimConstants {

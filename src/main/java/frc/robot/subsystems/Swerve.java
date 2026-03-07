@@ -26,6 +26,7 @@ import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.Commands;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
+import frc.robot.Constants;
 import frc.robot.Constants.SwerveConstants;
 import frc.robot.LimelightHelpers;
 
@@ -69,6 +70,10 @@ public class Swerve extends SubsystemBase {
     // Vision 遙測
     private GenericEntry visionTagCountEntry, visionRejectedEntry;
     private GenericEntry visionPoseXEntry, visionPoseYEntry;
+
+    // ── 遙測節流 ──
+    private int telemetryCounter = 0;
+    private boolean telemetryThisCycle = false;
 
     public Swerve() {
         initFields();
@@ -174,6 +179,12 @@ public class Swerve extends SubsystemBase {
 
     @Override
     public void periodic() {
+        // ── 遙測節流：每 kTelemetryDivider 個週期才輸出一次 ──
+        telemetryThisCycle = (++telemetryCounter >= Constants.kTelemetryDivider);
+        if (telemetryThisCycle) {
+            telemetryCounter = 0;
+        }
+
         // 取得基本感測器數據
         Rotation2d gyroAngle = getGyroAngle();
         SwerveModulePosition[] modulePositions = getModulePositions();
@@ -230,7 +241,7 @@ public class Swerve extends SubsystemBase {
                 }
 
                 // ── Vision 遙測輸出到 Shuffleboard ──
-                if (visionTagCountEntry != null) {
+                if (telemetryThisCycle && visionTagCountEntry != null) {
                     visionTagCountEntry.setDouble(mt2 != null ? mt2.tagCount : 0);
                     visionRejectedEntry.setBoolean(doRejectUpdate);
                     if (mt2 != null && mt2.tagCount > 0) {
@@ -247,7 +258,7 @@ public class Swerve extends SubsystemBase {
         m_field.setRobotPose(getPose());
 
         // 更新 Swerve Tab 陀螺儀角度
-        if (gyroAngleEntry != null) {
+        if (telemetryThisCycle && gyroAngleEntry != null) {
             gyroAngleEntry.setDouble(gyroAngle.getDegrees());
         }
 
@@ -279,14 +290,16 @@ public class Swerve extends SubsystemBase {
 
         var chassisSpeeds = new ChassisSpeeds(xSpeed, ySpeed, zSpeed);
 
-        if (chassisVxEntry != null) {
-            chassisVxEntry.setDouble(chassisSpeeds.vxMetersPerSecond);
-            chassisVyEntry.setDouble(chassisSpeeds.vyMetersPerSecond);
-            chassisOmegaEntry.setDouble(chassisSpeeds.omegaRadiansPerSecond);
-        } else {
-            SmartDashboard.putNumber("Chassis/vx", chassisSpeeds.vxMetersPerSecond);
-            SmartDashboard.putNumber("Chassis/vy", chassisSpeeds.vyMetersPerSecond);
-            SmartDashboard.putNumber("Chassis/omega", chassisSpeeds.omegaRadiansPerSecond);
+        if (telemetryThisCycle) {
+            if (chassisVxEntry != null) {
+                chassisVxEntry.setDouble(chassisSpeeds.vxMetersPerSecond);
+                chassisVyEntry.setDouble(chassisSpeeds.vyMetersPerSecond);
+                chassisOmegaEntry.setDouble(chassisSpeeds.omegaRadiansPerSecond);
+            } else {
+                SmartDashboard.putNumber("Chassis/vx", chassisSpeeds.vxMetersPerSecond);
+                SmartDashboard.putNumber("Chassis/vy", chassisSpeeds.vyMetersPerSecond);
+                SmartDashboard.putNumber("Chassis/omega", chassisSpeeds.omegaRadiansPerSecond);
+            }
         }
 
         SwerveModuleState[] mStates;
@@ -431,12 +444,14 @@ public class Swerve extends SubsystemBase {
     public void setModuleStates(SwerveModuleState[] desiredStates) {
         SwerveDriveKinematics.desaturateWheelSpeeds(desiredStates, getMaxVelocity());
 
-        if (mod0SpeedEntry != null) {
-            mod0SpeedEntry.setDouble(desiredStates[0].speedMetersPerSecond);
-            mod0AngleEntry.setDouble(desiredStates[0].angle.getDegrees());
-        } else {
-            SmartDashboard.putNumber("Module0/speed", desiredStates[0].speedMetersPerSecond);
-            SmartDashboard.putNumber("Module0/angle", desiredStates[0].angle.getDegrees());
+        if (telemetryThisCycle) {
+            if (mod0SpeedEntry != null) {
+                mod0SpeedEntry.setDouble(desiredStates[0].speedMetersPerSecond);
+                mod0AngleEntry.setDouble(desiredStates[0].angle.getDegrees());
+            } else {
+                SmartDashboard.putNumber("Module0/speed", desiredStates[0].speedMetersPerSecond);
+                SmartDashboard.putNumber("Module0/angle", desiredStates[0].angle.getDegrees());
+            }
         }
 
         mLeftFrontModule.setState(desiredStates[0]);

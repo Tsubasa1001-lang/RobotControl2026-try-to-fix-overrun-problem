@@ -10,6 +10,7 @@ import edu.wpi.first.wpilibj.TimedRobot;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.CommandScheduler;
+import frc.robot.Constants;
 import frc.robot.util.ShuffleboardManager;
 
 /**
@@ -26,6 +27,7 @@ public class Robot extends TimedRobot {
   // ── Loop 計時器：接上實體機器後可在 SmartDashboard 看到迴圈耗時 ──
   private double loopStartTime = 0;
   private double maxLoopTime = 0;
+  private int telemetryCounter = 0;
 
   /**
    * This function is run when the robot is first started up and should be used for any
@@ -63,10 +65,15 @@ public class Robot extends TimedRobot {
       maxLoopTime = loopTime;
     }
     boolean overrun = loopTime > 20.0;
-    m_shuffleboard.updateLoopTime(loopTime, maxLoopTime, overrun);
-    SmartDashboard.putNumber("Loop/CurrentMs", loopTime);
-    SmartDashboard.putNumber("Loop/MaxMs", maxLoopTime);
-    SmartDashboard.putBoolean("Loop/Overrun", overrun);
+
+    // 遙測輸出節流（計時每週期都算，但 NT 寫入降頻）
+    if (++telemetryCounter >= Constants.kTelemetryDivider) {
+      telemetryCounter = 0;
+      m_shuffleboard.updateLoopTime(loopTime, maxLoopTime, overrun);
+      SmartDashboard.putNumber("Loop/CurrentMs", loopTime);
+      SmartDashboard.putNumber("Loop/MaxMs", maxLoopTime);
+      SmartDashboard.putBoolean("Loop/Overrun", overrun);
+    }
   }
 
   /** This function is called once each time the robot enters Disabled mode. */

@@ -9,6 +9,7 @@ import edu.wpi.first.wpilibj.shuffleboard.BuiltInWidgets;
 import edu.wpi.first.wpilibj.shuffleboard.ShuffleboardTab;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj2.command.Command;
+import frc.robot.Constants;
 import frc.robot.Constants.AutoAimConstants;
 import frc.robot.subsystems.ShooterSubsystem;
 import frc.robot.subsystems.Swerve;
@@ -53,6 +54,7 @@ public class AutoAimAndShoot extends Command {
     // 狀態追蹤
     private boolean m_isFeeding = false;
     private boolean m_isInOwnZone = true; // 追蹤是否在己方場域
+    private int telemetryCounter = 0;
 
     public AutoAimAndShoot(Swerve swerve, ShooterSubsystem shooter, TransportSubsystem transport, ManualDrive manualDrive) {
         this(swerve, shooter, transport, manualDrive, null);
@@ -237,29 +239,32 @@ public class AutoAimAndShoot extends Command {
             m_isFeeding = false;
         }
 
-        // Debug 資訊
-        if (distanceEntry != null) {
-            distanceEntry.setDouble(distanceToTarget);
-            targetAngleEntry.setDouble(Math.toDegrees(targetAngleRad));
-            currentAngleEntry.setDouble(Math.toDegrees(currentAngleRad));
-            angleErrorEntry.setDouble(Math.toDegrees(angleErrorRad));
-            rotOutputEntry.setDouble(rotationOutput);
-            targetRpsEntry.setDouble(targetRps);
-            currentRpsEntry.setDouble(m_shooter.getCurrentRps());
-            isAlignedEntry.setBoolean(isAligned);
-            isAtSpeedEntry.setBoolean(isAtSpeed);
-            isFeedingEntry.setBoolean(m_isFeeding);
-        } else {
-            SmartDashboard.putNumber("AutoAim/Distance", distanceToTarget);
-            SmartDashboard.putNumber("AutoAim/TargetAngle", Math.toDegrees(targetAngleRad));
-            SmartDashboard.putNumber("AutoAim/CurrentAngle", Math.toDegrees(currentAngleRad));
-            SmartDashboard.putNumber("AutoAim/AngleError", Math.toDegrees(angleErrorRad));
-            SmartDashboard.putNumber("AutoAim/RotationOutput", rotationOutput);
-            SmartDashboard.putNumber("AutoAim/TargetRPS", targetRps);
-            SmartDashboard.putNumber("AutoAim/CurrentRPS", m_shooter.getCurrentRps());
-            SmartDashboard.putBoolean("AutoAim/IsAligned", isAligned);
-            SmartDashboard.putBoolean("AutoAim/IsAtSpeed", isAtSpeed);
-            SmartDashboard.putBoolean("AutoAim/IsFeeding", m_isFeeding);
+        // Debug 資訊（節流輸出）
+        if (++telemetryCounter >= Constants.kTelemetryDivider) {
+            telemetryCounter = 0;
+            if (distanceEntry != null) {
+                distanceEntry.setDouble(distanceToTarget);
+                targetAngleEntry.setDouble(Math.toDegrees(targetAngleRad));
+                currentAngleEntry.setDouble(Math.toDegrees(currentAngleRad));
+                angleErrorEntry.setDouble(Math.toDegrees(angleErrorRad));
+                rotOutputEntry.setDouble(rotationOutput);
+                targetRpsEntry.setDouble(targetRps);
+                currentRpsEntry.setDouble(m_shooter.getCurrentRps());
+                isAlignedEntry.setBoolean(isAligned);
+                isAtSpeedEntry.setBoolean(isAtSpeed);
+                isFeedingEntry.setBoolean(m_isFeeding);
+            } else {
+                SmartDashboard.putNumber("AutoAim/Distance", distanceToTarget);
+                SmartDashboard.putNumber("AutoAim/TargetAngle", Math.toDegrees(targetAngleRad));
+                SmartDashboard.putNumber("AutoAim/CurrentAngle", Math.toDegrees(currentAngleRad));
+                SmartDashboard.putNumber("AutoAim/AngleError", Math.toDegrees(angleErrorRad));
+                SmartDashboard.putNumber("AutoAim/RotationOutput", rotationOutput);
+                SmartDashboard.putNumber("AutoAim/TargetRPS", targetRps);
+                SmartDashboard.putNumber("AutoAim/CurrentRPS", m_shooter.getCurrentRps());
+                SmartDashboard.putBoolean("AutoAim/IsAligned", isAligned);
+                SmartDashboard.putBoolean("AutoAim/IsAtSpeed", isAtSpeed);
+                SmartDashboard.putBoolean("AutoAim/IsFeeding", m_isFeeding);
+            }
         }
     }
 

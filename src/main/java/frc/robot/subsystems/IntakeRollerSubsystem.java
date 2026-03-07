@@ -15,6 +15,7 @@ import edu.wpi.first.wpilibj.shuffleboard.ShuffleboardTab;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
+import frc.robot.Constants;
 import frc.robot.Constants.IntakeRollerConstants;
 import frc.robot.util.TunableNumber;
 
@@ -24,6 +25,7 @@ public class IntakeRollerSubsystem extends SubsystemBase {
     private final TalonFX followerMotor;
 
     private final VelocityVoltage velocityRequest = new VelocityVoltage(0);
+    private int telemetryCounter = 0;
 
     // ── Shuffleboard 即時調參 ──
     private TunableNumber tunableKV;
@@ -181,25 +183,29 @@ public class IntakeRollerSubsystem extends SubsystemBase {
             followerMotor.getConfigurator().apply(newSlot0);
         }
 
-        // ── 遙測數據 ──
-        double actualRps = getCurrentRps();
-        double targetRps = velocityRequest.Velocity;
-        double errorRps = targetRps - actualRps;
-        double outputV = leaderMotor.getMotorVoltage().getValueAsDouble();
-        double leaderA = leaderMotor.getStatorCurrent().getValueAsDouble();
+        // ── 遙測數據（節流）──
+        if (++telemetryCounter >= Constants.kTelemetryDivider) {
+            telemetryCounter = 0;
 
-        if (actualRpsEntry != null) {
-            actualRpsEntry.setDouble(actualRps);
-            targetRpsEntry.setDouble(targetRps);
-            errorRpsEntry.setDouble(errorRps);
-            outputVoltageEntry.setDouble(outputV);
-            leaderCurrentEntry.setDouble(leaderA);
-        } else {
-            SmartDashboard.putNumber("IntakeRoller/Actual RPS", actualRps);
-            SmartDashboard.putNumber("IntakeRoller/Target RPS", targetRps);
-            SmartDashboard.putNumber("IntakeRoller/Error RPS", errorRps);
-            SmartDashboard.putNumber("IntakeRoller/Leader Current", leaderA);
-            SmartDashboard.putNumber("IntakeRoller/Output Voltage", outputV);
+            double actualRps = getCurrentRps();
+            double targetRps = velocityRequest.Velocity;
+            double errorRps = targetRps - actualRps;
+            double outputV = leaderMotor.getMotorVoltage().getValueAsDouble();
+            double leaderA = leaderMotor.getStatorCurrent().getValueAsDouble();
+
+            if (actualRpsEntry != null) {
+                actualRpsEntry.setDouble(actualRps);
+                targetRpsEntry.setDouble(targetRps);
+                errorRpsEntry.setDouble(errorRps);
+                outputVoltageEntry.setDouble(outputV);
+                leaderCurrentEntry.setDouble(leaderA);
+            } else {
+                SmartDashboard.putNumber("IntakeRoller/Actual RPS", actualRps);
+                SmartDashboard.putNumber("IntakeRoller/Target RPS", targetRps);
+                SmartDashboard.putNumber("IntakeRoller/Error RPS", errorRps);
+                SmartDashboard.putNumber("IntakeRoller/Leader Current", leaderA);
+                SmartDashboard.putNumber("IntakeRoller/Output Voltage", outputV);
+            }
         }
     }
 }
