@@ -18,7 +18,7 @@ import frc.robot.util.TunableNumber;
 
 public class ShooterSubsystem extends SubsystemBase {
     private final TalonFX leaderMotor;
-    // private final TalonFX followerMotor;
+    private final TalonFX followerMotor;
     private final VelocityVoltage velocityRequest = new VelocityVoltage(0);
 
     private  double Target_RPS = 50.0;
@@ -33,7 +33,7 @@ public class ShooterSubsystem extends SubsystemBase {
 
     public ShooterSubsystem() {
         leaderMotor = new TalonFX(22);
-        // followerMotor = new TalonFX(21);
+        followerMotor = new TalonFX(21);
 
         TalonFXConfiguration config = new TalonFXConfiguration();
         config.MotorOutput.NeutralMode = NeutralModeValue.Coast;
@@ -45,10 +45,12 @@ public class ShooterSubsystem extends SubsystemBase {
         config.Slot0.kD = tunableKD.get();
 
         leaderMotor.getConfigurator().apply(config);
-        // followerMotor.getConfigurator().apply(config);
+        followerMotor.getConfigurator().apply(config);
 
-        // 設定 Follower (若機構是對向夾擠，opposeLeader 設為 true)
-        // followerMotor.setControl(new Follower(leaderMotor.getDeviceID(), MotorAlignmentValue.Opposed));
+        // 設定 Follower
+        // MotorAlignmentValue.Opposed  = 對向夾擠安裝（兩顆馬達面對面），正轉方向相反，需要反轉
+        // MotorAlignmentValue.SameDirection = 同向安裝，直接跟隨
+        followerMotor.setControl(new Follower(leaderMotor.getDeviceID(), MotorAlignmentValue.Opposed));
     }
 
     private void setVelocity(double rps){  
@@ -57,6 +59,7 @@ public class ShooterSubsystem extends SubsystemBase {
 
     private void stop() {
         leaderMotor.stopMotor();
+        followerMotor.stopMotor();
     }
 
     /**

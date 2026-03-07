@@ -12,7 +12,18 @@
     "**/.project": true,
     "**/.settings": true,
     "**/.factorypath": true,
-    "**/*~": true
+    "**/*~": true,
+    "*.gradle": true,
+    "gradle*": true,
+    ".wpilib": true,
+    "build*": true,
+    "ctre_sim": true,
+    "vendordeps": true,
+    ".gitignore": true,
+    "networktables.json": true,
+    "README.md": true,
+    "simgui*": true,
+    "WPILib-License.md": true,
   },
   "java.test.config": [
     {
