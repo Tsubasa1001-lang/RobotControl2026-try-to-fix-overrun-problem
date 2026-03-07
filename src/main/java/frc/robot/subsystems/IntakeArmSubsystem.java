@@ -9,6 +9,7 @@ import com.ctre.phoenix6.hardware.TalonFX;
 import com.ctre.phoenix6.signals.GravityTypeValue;
 import com.ctre.phoenix6.signals.InvertedValue;
 import com.ctre.phoenix6.signals.NeutralModeValue;
+import com.ctre.phoenix6.StatusSignal;
 
 import edu.wpi.first.networktables.GenericEntry;
 import edu.wpi.first.wpilibj.shuffleboard.BuiltInWidgets;
@@ -16,6 +17,9 @@ import edu.wpi.first.wpilibj.shuffleboard.ShuffleboardTab;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
+import edu.wpi.first.units.measure.Angle;
+import edu.wpi.first.units.measure.Voltage;
+import edu.wpi.first.units.measure.Current;
 import com.ctre.phoenix6.signals.MotorAlignmentValue;
 import frc.robot.Constants;
 import frc.robot.Constants.IntakeArmConstants;
@@ -30,6 +34,11 @@ public class IntakeArmSubsystem extends SubsystemBase {
     private final PositionVoltage positionRequest = new PositionVoltage(0).withSlot(0);
     private int telemetryCounter = 0;
     private final DutyCycleOut manualRequest = new DutyCycleOut(0);
+
+    // ── 快取 Status Signal ──
+    private final StatusSignal<Angle> positionSignal;
+    private final StatusSignal<Voltage> motorVoltageSignal;
+    private final StatusSignal<Current> statorCurrentSignal;
 
     // ── Shuffleboard 即時調參 ──
     private TunableNumber tunableKP;
@@ -111,6 +120,19 @@ public class IntakeArmSubsystem extends SubsystemBase {
         
         // 歸零：假設機器人啟動時，Intake 是處於「收起」的狀態 (0度)
         leaderMotor.setPosition(0);
+
+        // ── 快取 Status Signal 並設定 CAN 更新頻率 ──
+        // position: 手臂位置控制需要，50Hz 足夠
+        // voltage/current: debug 遙測用，10Hz
+        positionSignal = leaderMotor.getPosition();
+        motorVoltageSignal = leaderMotor.getMotorVoltage();
+        statorCurrentSignal = leaderMotor.getStatorCurrent();
+
+        positionSignal.setUpdateFrequency(50);        // 50Hz
+        motorVoltageSignal.setUpdateFrequency(10);    // 10Hz (debug only)
+        statorCurrentSignal.setUpdateFrequency(10);   // 10Hz (debug only)
+
+        leaderMotor.optimizeBusUtilization();
     }
 
     /**
@@ -167,10 +189,10 @@ public class IntakeArmSubsystem extends SubsystemBase {
         if (++telemetryCounter >= Constants.kTelemetryDivider) {
             telemetryCounter = 0;
 
-            double motorRotations = leaderMotor.getPosition().getValueAsDouble();
+            double motorRotations = positionSignal.refresh().getValueAsDouble();
             double armRotations = motorRotations / IntakeArmConstants.kGearRatio;
-            double outputV = leaderMotor.getMotorVoltage().getValueAsDouble();
-            double statorA = leaderMotor.getStatorCurrent().getValueAsDouble();
+            double outputV = motorVoltageSignal.refresh().getValueAsDouble();
+            double statorA = statorCurrentSignal.refresh().getValueAsDouble();
 
             if (armRotationsEntry != null) {
                 armRotationsEntry.setDouble(armRotations);

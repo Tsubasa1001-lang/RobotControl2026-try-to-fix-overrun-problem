@@ -8,6 +8,7 @@ import com.ctre.phoenix6.signals.InvertedValue;
 import com.ctre.phoenix6.signals.NeutralModeValue;
 import com.ctre.phoenix6.signals.MotorAlignmentValue;
 import com.ctre.phoenix6.controls.Follower;
+import com.ctre.phoenix6.StatusSignal;
 
 import edu.wpi.first.networktables.GenericEntry;
 import edu.wpi.first.wpilibj.shuffleboard.BuiltInWidgets;
@@ -15,6 +16,9 @@ import edu.wpi.first.wpilibj.shuffleboard.ShuffleboardTab;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
+import edu.wpi.first.units.measure.AngularVelocity;
+import edu.wpi.first.units.measure.Voltage;
+import edu.wpi.first.units.measure.Current;
 import frc.robot.Constants;
 import frc.robot.Constants.IntakeRollerConstants;
 import frc.robot.util.TunableNumber;
@@ -26,6 +30,11 @@ public class IntakeRollerSubsystem extends SubsystemBase {
 
     private final VelocityVoltage velocityRequest = new VelocityVoltage(0);
     private int telemetryCounter = 0;
+
+    // ── 快取 Status Signal ──
+    private final StatusSignal<AngularVelocity> velocitySignal;
+    private final StatusSignal<Voltage> motorVoltageSignal;
+    private final StatusSignal<Current> statorCurrentSignal;
 
     // ── Shuffleboard 即時調參 ──
     private TunableNumber tunableKV;
@@ -118,6 +127,17 @@ public class IntakeRollerSubsystem extends SubsystemBase {
 
         // 設定 Follower 跟隨 Leader (對向安裝)
         followerMotor.setControl(new Follower(leaderMotor.getDeviceID(), MotorAlignmentValue.Opposed));
+
+        // ── 快取 Status Signal 並設定 CAN 更新頻率 ──
+        velocitySignal = leaderMotor.getVelocity();
+        motorVoltageSignal = leaderMotor.getMotorVoltage();
+        statorCurrentSignal = leaderMotor.getStatorCurrent();
+
+        velocitySignal.setUpdateFrequency(50);       // 50Hz
+        motorVoltageSignal.setUpdateFrequency(10);    // 10Hz (debug only)
+        statorCurrentSignal.setUpdateFrequency(10);   // 10Hz (debug only)
+
+        leaderMotor.optimizeBusUtilization();
     }
 
     /**
@@ -133,11 +153,11 @@ public class IntakeRollerSubsystem extends SubsystemBase {
     }
 
     /**
-     * 取得目前實際轉速
+     * 取得目前實際轉速（使用快取 Signal）
      * @return 目前 RPS
      */
     public double getCurrentRps() {
-        return leaderMotor.getVelocity().getValueAsDouble();
+        return velocitySignal.refresh().getValueAsDouble();
     }
 
     /**
@@ -190,8 +210,8 @@ public class IntakeRollerSubsystem extends SubsystemBase {
             double actualRps = getCurrentRps();
             double targetRps = velocityRequest.Velocity;
             double errorRps = targetRps - actualRps;
-            double outputV = leaderMotor.getMotorVoltage().getValueAsDouble();
-            double leaderA = leaderMotor.getStatorCurrent().getValueAsDouble();
+            double outputV = motorVoltageSignal.refresh().getValueAsDouble();
+            double leaderA = statorCurrentSignal.refresh().getValueAsDouble();
 
             if (actualRpsEntry != null) {
                 actualRpsEntry.setDouble(actualRps);

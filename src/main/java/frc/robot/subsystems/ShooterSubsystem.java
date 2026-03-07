@@ -9,9 +9,14 @@ import com.ctre.phoenix6.controls.Follower;
 import com.ctre.phoenix6.controls.VelocityVoltage;
 import com.ctre.phoenix6.hardware.TalonFX;
 import com.ctre.phoenix6.signals.NeutralModeValue;
+import com.ctre.phoenix6.StatusSignal;
 
 import edu.wpi.first.math.MathUtil;
 import edu.wpi.first.networktables.GenericEntry;
+
+import edu.wpi.first.units.measure.AngularVelocity;
+import edu.wpi.first.units.measure.Voltage;
+import edu.wpi.first.units.measure.Current;
 import edu.wpi.first.wpilibj.shuffleboard.BuiltInWidgets;
 import edu.wpi.first.wpilibj.shuffleboard.ShuffleboardTab;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
@@ -28,6 +33,11 @@ public class ShooterSubsystem extends SubsystemBase {
     private final TalonFX followerMotor;
     private final VelocityVoltage velocityRequest = new VelocityVoltage(0);
     private int telemetryCounter = 0;
+
+    // ── 快取 Status Signal（避免每週期重複查找 + 控制 CAN 更新頻率）──
+    private final StatusSignal<AngularVelocity> velocitySignal;
+    private final StatusSignal<Voltage> motorVoltageSignal;
+    private final StatusSignal<Current> statorCurrentSignal;
 
     // ── Shuffleboard 即時調參 ──
     private TunableNumber tunableKV;
@@ -96,6 +106,20 @@ public class ShooterSubsystem extends SubsystemBase {
         followerMotor.getConfigurator().apply(config);
 
         followerMotor.setControl(new Follower(leaderMotor.getDeviceID(), MotorAlignmentValue.Opposed));
+
+        // ── 快取 Status Signal 並設定 CAN 更新頻率 ──
+        // velocity: 控制迴路用（isAtSpeed 判斷），50Hz 足夠（預設 250Hz 太浪費）
+        // voltage/current: 僅 debug 遙測用，10Hz 即可
+        velocitySignal = leaderMotor.getVelocity();
+        motorVoltageSignal = leaderMotor.getMotorVoltage();
+        statorCurrentSignal = leaderMotor.getStatorCurrent();
+
+        velocitySignal.setUpdateFrequency(50);       // 50Hz = 20ms
+        motorVoltageSignal.setUpdateFrequency(10);    // 10Hz = 100ms
+        statorCurrentSignal.setUpdateFrequency(10);   // 10Hz = 100ms
+
+        // 其餘未使用的 Signal 降到最低，節省 CAN 頻寬
+        leaderMotor.optimizeBusUtilization();
     }
 
     private void setVelocity(double rps){  
@@ -123,11 +147,11 @@ public class ShooterSubsystem extends SubsystemBase {
     }
 
     /**
-     * 取得目前實際轉速
+     * 取得目前實際轉速（使用快取 Signal，不重複查找）
      * @return 目前 RPS
      */
     public double getCurrentRps() {
-        return leaderMotor.getVelocity().getValueAsDouble();
+        return velocitySignal.refresh().getValueAsDouble();
     }
 
     /**
@@ -173,8 +197,7 @@ public class ShooterSubsystem extends SubsystemBase {
      * @return true 代表速度夠了，可以發射
      */
     public boolean isAtSpeed(double targetRps, double tolerance) {
-        // 取得目前實際速度
-        double currentRps = leaderMotor.getVelocity().getValueAsDouble();
+        double currentRps = velocitySignal.refresh().getValueAsDouble();
         return Math.abs(currentRps - targetRps) < tolerance;
     }
     /**
@@ -234,11 +257,11 @@ public class ShooterSubsystem extends SubsystemBase {
         if (++telemetryCounter >= Constants.kTelemetryDivider) {
             telemetryCounter = 0;
 
-            double currentRps = leaderMotor.getVelocity().getValueAsDouble();
+            double currentRps = velocitySignal.refresh().getValueAsDouble();
             double targetRps = velocityRequest.Velocity;
             double errorRps = targetRps - currentRps;
-            double outputV = leaderMotor.getMotorVoltage().getValueAsDouble();
-            double statorA = leaderMotor.getStatorCurrent().getValueAsDouble();
+            double outputV = motorVoltageSignal.refresh().getValueAsDouble();
+            double statorA = statorCurrentSignal.refresh().getValueAsDouble();
 
             if (currentRpsEntry != null) {
                 // Shuffleboard 模式

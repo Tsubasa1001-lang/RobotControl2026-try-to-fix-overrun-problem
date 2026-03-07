@@ -1,6 +1,7 @@
 package frc.robot.subsystems;
 
 import com.ctre.phoenix6.StatusCode;
+import com.ctre.phoenix6.StatusSignal;
 import com.ctre.phoenix6.configs.FeedbackConfigs;
 import com.ctre.phoenix6.configs.MotorOutputConfigs;
 import com.ctre.phoenix6.hardware.TalonFX;
@@ -8,6 +9,8 @@ import com.ctre.phoenix6.sim.TalonFXSimState;
 import com.ctre.phoenix6.signals.InvertedValue;
 import com.ctre.phoenix6.signals.NeutralModeValue;
 
+import edu.wpi.first.units.measure.Angle;
+import edu.wpi.first.units.measure.AngularVelocity;
 import edu.wpi.first.wpilibj.DriverStation;
 import edu.wpi.first.wpilibj.RobotBase;
 import frc.robot.Constants.SwerveConstants;
@@ -16,6 +19,10 @@ public class SwerveModuleKraken extends SwerveModule {
 
     private TalonFX rotorMotor;
     private TalonFX throttleMotor;
+
+    // ── 快取 Status Signal（里程計關鍵路徑，100Hz 更新）──
+    private StatusSignal<Angle> throttlePositionSignal;
+    private StatusSignal<AngularVelocity> throttleVelocitySignal;
 
     // 模擬用：追蹤模擬的位置和速度
     private double simThrottlePosition = 0;
@@ -61,6 +68,18 @@ public class SwerveModuleKraken extends SwerveModule {
         if (status != StatusCode.OK) {
             DriverStation.reportWarning(mLocation + " Rotor Feedback Config Error: " + status, false);
         }
+
+        // ── 快取 Status Signal 並設定 CAN 更新頻率 ──
+        // 里程計 (Odometry) 用：position + velocity 需要高頻率
+        throttlePositionSignal = throttleMotor.getPosition();
+        throttleVelocitySignal = throttleMotor.getVelocity();
+
+        throttlePositionSignal.setUpdateFrequency(100);  // 100Hz（里程計關鍵路徑）
+        throttleVelocitySignal.setUpdateFrequency(100);  // 100Hz
+
+        // Rotor 馬達不需要讀取 Status Signal（用 CANcoder 讀角度），降低頻率
+        throttleMotor.optimizeBusUtilization();
+        rotorMotor.optimizeBusUtilization();
     }
 
     @Override
@@ -96,7 +115,7 @@ public class SwerveModuleKraken extends SwerveModule {
         if (RobotBase.isSimulation()) {
             return simThrottlePosition;
         }
-        return throttleMotor.getPosition().getValueAsDouble();
+        return throttlePositionSignal.refresh().getValueAsDouble();
     }
 
     @Override
@@ -104,7 +123,7 @@ public class SwerveModuleKraken extends SwerveModule {
         if (RobotBase.isSimulation()) {
             return simThrottleVelocity;
         }
-        return throttleMotor.getVelocity().getValueAsDouble();
+        return throttleVelocitySignal.refresh().getValueAsDouble();
     }
 
     @Override

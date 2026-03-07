@@ -1,6 +1,7 @@
 package frc.robot.subsystems;
 
 import com.ctre.phoenix6.hardware.Pigeon2;
+import com.ctre.phoenix6.StatusSignal;
 
 import edu.wpi.first.math.MathUtil;
 import edu.wpi.first.math.VecBuilder;
@@ -15,6 +16,7 @@ import edu.wpi.first.math.kinematics.SwerveModuleState;
 import edu.wpi.first.math.filter.SlewRateLimiter;
 import edu.wpi.first.math.util.Units;
 import edu.wpi.first.networktables.GenericEntry;
+import edu.wpi.first.units.measure.AngularVelocity;
 import edu.wpi.first.util.sendable.SendableBuilder;
 import edu.wpi.first.wpilibj.DriverStation;
 import edu.wpi.first.wpilibj.DriverStation.Alliance;
@@ -43,6 +45,7 @@ public class Swerve extends SubsystemBase {
     private SwerveDrivePoseEstimator poseEstimator;
     // IMU
     private Pigeon2 mPigeonIMU;
+    private StatusSignal<AngularVelocity> gyroAngularVelocitySignal; // 快取角速度 Signal
     // For Acceleration Constraints
     private ChassisSpeeds mTargetChassisSpeeds = new ChassisSpeeds(0, 0, 0);
     private ChassisSpeeds mAimChassisSpeeds = new ChassisSpeeds(0, 0, 0);
@@ -136,6 +139,14 @@ public class Swerve extends SubsystemBase {
 
     private void initFields() {
         mPigeonIMU = new Pigeon2(SwerveConstants.kPigeonID);
+
+        // ── 快取 Pigeon2 Signal 並設定 CAN 更新頻率 ──
+        // Yaw: getRotation2d() 內部會讀取，設定 100Hz（里程計關鍵路徑）
+        mPigeonIMU.getYaw().setUpdateFrequency(100);
+        // 角速度: 用於判斷是否融合 Limelight 視覺資料
+        gyroAngularVelocitySignal = mPigeonIMU.getAngularVelocityZDevice();
+        gyroAngularVelocitySignal.setUpdateFrequency(50); // 50Hz 足夠
+        mPigeonIMU.optimizeBusUtilization();
 
 
         mLeftFrontModule = new SwerveModuleKraken(
@@ -343,7 +354,7 @@ public class Swerve extends SubsystemBase {
         if (RobotBase.isSimulation()) {
             return 0; // 模擬中不需要精確的角速度
         }
-        return mPigeonIMU.getAngularVelocityZDevice().getValueAsDouble();
+        return gyroAngularVelocitySignal.refresh().getValueAsDouble();
     }
 
     /***

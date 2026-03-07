@@ -1,5 +1,6 @@
 package frc.robot.subsystems;
 
+import com.ctre.phoenix6.StatusSignal;
 import com.ctre.phoenix6.hardware.CANcoder;
 import com.revrobotics.RelativeEncoder;
 import edu.wpi.first.math.geometry.Rotation2d;
@@ -8,6 +9,7 @@ import edu.wpi.first.math.kinematics.SwerveModuleState;
 import edu.wpi.first.math.trajectory.TrapezoidProfile;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.math.controller.ProfiledPIDController;
+import edu.wpi.first.units.measure.Angle;
 import frc.robot.Constants.SwerveConstants;
 import frc.robot.util.TunableNumber;
 
@@ -19,6 +21,7 @@ public abstract class SwerveModule {
     // Initialize rotor encoder
     // 初始化 rotor encoder
     private CANcoder mRotorEncoder;
+    private StatusSignal<Angle> mRotorAbsolutePositionSignal; // 快取 CANcoder signal
 
     // Initialize rotor PID controller
     // 初始化 rotor PID controller
@@ -56,6 +59,11 @@ public abstract class SwerveModule {
 
         mRotorEncoder = new CANcoder(rotorEncoderID,"DRIVETRAIN");
          // Configure absolute encoder
+
+        // 快取 CANcoder Signal 並設定更新頻率（里程計關鍵路徑）
+        mRotorAbsolutePositionSignal = mRotorEncoder.getAbsolutePosition();
+        mRotorAbsolutePositionSignal.setUpdateFrequency(100); // 100Hz
+        mRotorEncoder.optimizeBusUtilization();
     }
 
     protected abstract void initMotors(int throttleID, int rotorID, boolean throttleInverted, boolean rotorInverted);
@@ -83,8 +91,8 @@ public abstract class SwerveModule {
      */
     public double getRotorPosition() {
         if (mUseAbsoluteEncoder) {
-            // 絕對位置Encoder
-            return mRotorEncoder.getAbsolutePosition().getValueAsDouble()*360; // 度
+            // 絕對位置Encoder（使用快取 Signal）
+            return mRotorAbsolutePositionSignal.refresh().getValueAsDouble()*360; // 度
         }
         else {
             // 相對位置Encoder
