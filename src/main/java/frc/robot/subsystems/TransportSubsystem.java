@@ -8,65 +8,33 @@ import com.ctre.phoenix6.signals.NeutralModeValue;
 
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
+import frc.robot.Constants.TransportConstants;
 
 public class TransportSubsystem extends SubsystemBase {
     // 宣告兩顆馬達
     private final TalonFX up_to_shoot;
     private final TalonFX transport;
 
-    // 建立 VelocityVoltage 閉環控制請求物件（取代原本的 DutyCycleOut 開環控制）
-    // 這樣無論電池電壓多低，馬達都會維持恆定轉速
+    // 建立 VelocityVoltage 閉環控制請求物件
     private final VelocityVoltage velocityRequest = new VelocityVoltage(0);
 
-    // ==========================================
-    // 設定參數 (單位: RPS — rotations per second)
-    // ==========================================
-    // transport 輸送帶目標轉速
-    //   原始 DutyCycleOut(0.4) ≈ 12V×0.4 = 4.8V → Kraken 空載~100RPS → 負載估 ~30-40 RPS
-    //   TODO: 請在實際機器上量測並微調
-    private static final double TRANSPORT_RPS = 35.0;
-
-    // up_to_shoot 上膛推球目標轉速
-    //   原始 DutyCycleOut(1.0) = 全速 → 負載估 ~80 RPS
-    //   TODO: 請在實際機器上量測並微調
-    private static final double UP_TO_SHOOT_RPS = 80.0;
-
-    // 慢速輸送帶轉速 (原始 0.2 佔空比 → 約一半速度)
-    private static final double SLOW_TRANSPORT_RPS = 18.0;
-    
-    // 電流限制
-    private static final double STATOR_CURRENT_LIMIT = 60.0;
-    private static final double SUPPLY_CURRENT_LIMIT = 40.0;
-
     public TransportSubsystem() {
-        // 請修改為你實際的 CAN ID
-        up_to_shoot = new TalonFX(26); 
-        transport = new TalonFX(30);
+        up_to_shoot = new TalonFX(TransportConstants.kUpToShootMotorID); 
+        transport = new TalonFX(TransportConstants.kTransportMotorID);
 
         // ==========================================
         // up_to_shoot 馬達設定
         // ==========================================
         TalonFXConfiguration shootConfig = new TalonFXConfiguration();
-
-        // Coast 模式：停止時自然滑行，不瞬間煞車，避免球卡住或機構衝擊
         shootConfig.MotorOutput.NeutralMode = NeutralModeValue.Coast;
-
-        // 閉環 PID 設定 (Slot 0) — 用於 VelocityVoltage
-        //   kV: 前饋，12V / ~100RPS ≈ 0.12
-        //   kP: 比例增益，修正轉速誤差
-        //   TODO: 請在實機上微調
-        shootConfig.Slot0.kV = 0.12;
-        shootConfig.Slot0.kP = 0.2;
-        shootConfig.Slot0.kI = 0.0;
-        shootConfig.Slot0.kD = 0.0;
-
-        // 電流限制
+        shootConfig.Slot0.kV = TransportConstants.kDefaultKV;
+        shootConfig.Slot0.kP = TransportConstants.kDefaultKP;
+        shootConfig.Slot0.kI = TransportConstants.kDefaultKI;
+        shootConfig.Slot0.kD = TransportConstants.kDefaultKD;
         shootConfig.CurrentLimits.StatorCurrentLimitEnable = true;
-        shootConfig.CurrentLimits.StatorCurrentLimit = STATOR_CURRENT_LIMIT;
+        shootConfig.CurrentLimits.StatorCurrentLimit = TransportConstants.kStatorCurrentLimit;
         shootConfig.CurrentLimits.SupplyCurrentLimitEnable = true;
-        shootConfig.CurrentLimits.SupplyCurrentLimit = SUPPLY_CURRENT_LIMIT;
-
-        // 轉向設定
+        shootConfig.CurrentLimits.SupplyCurrentLimit = TransportConstants.kSupplyCurrentLimit;
         shootConfig.MotorOutput.Inverted = InvertedValue.Clockwise_Positive;
         up_to_shoot.getConfigurator().apply(shootConfig);
 
@@ -74,23 +42,15 @@ public class TransportSubsystem extends SubsystemBase {
         // transport 輸送帶馬達設定
         // ==========================================
         TalonFXConfiguration transportConfig = new TalonFXConfiguration();
-
-        // Coast 模式（與原始設定一致）
         transportConfig.MotorOutput.NeutralMode = NeutralModeValue.Coast;
-
-        // 閉環 PID 設定
-        transportConfig.Slot0.kV = 0.12;
-        transportConfig.Slot0.kP = 0.2;
-        transportConfig.Slot0.kI = 0.0;
-        transportConfig.Slot0.kD = 0.0;
-
-        // 電流限制
+        transportConfig.Slot0.kV = TransportConstants.kDefaultKV;
+        transportConfig.Slot0.kP = TransportConstants.kDefaultKP;
+        transportConfig.Slot0.kI = TransportConstants.kDefaultKI;
+        transportConfig.Slot0.kD = TransportConstants.kDefaultKD;
         transportConfig.CurrentLimits.StatorCurrentLimitEnable = true;
-        transportConfig.CurrentLimits.StatorCurrentLimit = STATOR_CURRENT_LIMIT;
+        transportConfig.CurrentLimits.StatorCurrentLimit = TransportConstants.kStatorCurrentLimit;
         transportConfig.CurrentLimits.SupplyCurrentLimitEnable = true;
-        transportConfig.CurrentLimits.SupplyCurrentLimit = SUPPLY_CURRENT_LIMIT;
-
-        // 轉向設定（與 up_to_shoot 對向安裝）
+        transportConfig.CurrentLimits.SupplyCurrentLimit = TransportConstants.kSupplyCurrentLimit;
         transportConfig.MotorOutput.Inverted = InvertedValue.CounterClockwise_Positive;
         transport.getConfigurator().apply(transportConfig);
     }
@@ -109,14 +69,14 @@ public class TransportSubsystem extends SubsystemBase {
      * 只啟動 transport 輸送帶 (閉環目標轉速)
      */
     public void setSpeed_transport() {
-        transport.setControl(velocityRequest.withVelocity(TRANSPORT_RPS));
+        transport.setControl(velocityRequest.withVelocity(TransportConstants.kTransportRps));
     }
 
     /**
      * 只啟動 up_to_shoot 上膛推球 (閉環目標轉速)
      */
     public void setSpeed_to_shoot() {
-        up_to_shoot.setControl(velocityRequest.withVelocity(UP_TO_SHOOT_RPS));
+        up_to_shoot.setControl(velocityRequest.withVelocity(TransportConstants.kUpToShootRps));
     }
 
     /**
@@ -132,7 +92,7 @@ public class TransportSubsystem extends SubsystemBase {
      * 同時啟動 transport（輸送帶）和 up_to_shoot（上膛推球）
      */
     public void runTransport() {
-        setSpeed(TRANSPORT_RPS, UP_TO_SHOOT_RPS);
+        setSpeed(TransportConstants.kTransportRps, TransportConstants.kUpToShootRps);
     }
 
     /**
@@ -148,11 +108,9 @@ public class TransportSubsystem extends SubsystemBase {
     public Command sys_runTransport() {
         return this.runEnd(
             () -> {
-                // 執行動作：以閉環目標轉速運轉
-                setSpeed(TRANSPORT_RPS, UP_TO_SHOOT_RPS);
+                setSpeed(TransportConstants.kTransportRps, TransportConstants.kUpToShootRps);
             }, 
             () -> {
-                // 結束動作：停止
                 stop();
             }
         );
@@ -161,11 +119,9 @@ public class TransportSubsystem extends SubsystemBase {
     public Command sys_slowRunTransport() {
         return this.runEnd(
             () -> {
-                // 執行動作：慢速，兩顆馬達同時以慢速運轉
-                setSpeed(SLOW_TRANSPORT_RPS, SLOW_TRANSPORT_RPS);
+                setSpeed(TransportConstants.kSlowTransportRps, TransportConstants.kSlowTransportRps);
             }, 
             () -> {
-                // 結束動作：停止（Coast 自然滑行）
                 stop();
             }
         );
@@ -176,7 +132,7 @@ public class TransportSubsystem extends SubsystemBase {
      */
     public Command sys_reverseTransport() {
         return this.runEnd(
-            () -> setSpeed(-TRANSPORT_RPS, -UP_TO_SHOOT_RPS), 
+            () -> setSpeed(-TransportConstants.kTransportRps, -TransportConstants.kUpToShootRps), 
             this::stop
         );
     }

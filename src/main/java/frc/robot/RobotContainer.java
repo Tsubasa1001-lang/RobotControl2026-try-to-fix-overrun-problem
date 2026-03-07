@@ -5,6 +5,7 @@
 package frc.robot;
 
 import frc.robot.Constants.OperatorConstants;
+import frc.robot.Constants.ShooterConstants;
 import frc.robot.commands.Drive2Tag;
 import frc.robot.commands.ManualDrive;
 import frc.robot.commands.AutoAimAndShoot;
@@ -73,9 +74,9 @@ public class RobotContainer {
     // WPILib 的 Command 是有狀態的物件，同一個實例不能同時被兩個 Trigger 使用
     private Command createAutoShootCommand() {
         return Commands.parallel(
-            shooterSubsystem.sys_manualShoot(50), 
+            shooterSubsystem.sys_manualShoot(ShooterConstants.kNearShootRps), 
             Commands.sequence(
-                Commands.waitUntil(() -> shooterSubsystem.isAtSpeed(50)).withTimeout(2.0),
+                Commands.waitUntil(() -> shooterSubsystem.isAtSpeed(ShooterConstants.kNearShootRps)).withTimeout(2.0),
                 transport.sys_runTransport().withTimeout(4.0)
             )
         ).withTimeout(4.0);
@@ -83,9 +84,9 @@ public class RobotContainer {
 
     private Command createFarAutoShootCommand() {
         return Commands.parallel(
-            shooterSubsystem.sys_manualShoot(62), 
+            shooterSubsystem.sys_manualShoot(ShooterConstants.kFarShootRps), 
             Commands.sequence(
-                Commands.waitUntil(() -> shooterSubsystem.isAtSpeed(62)).withTimeout(2.0),
+                Commands.waitUntil(() -> shooterSubsystem.isAtSpeed(ShooterConstants.kFarShootRps)).withTimeout(2.0),
                 transport.sys_runTransport().withTimeout(4.0)
             )
         ).withTimeout(4.0);
@@ -100,7 +101,7 @@ public class RobotContainer {
 
     private Command createShootCommand() {
         return Commands.sequence(
-            Commands.waitUntil(() -> shooterSubsystem.isAtSpeed(50)),
+            Commands.waitUntil(() -> shooterSubsystem.isAtSpeed(ShooterConstants.kNearShootRps)),
             transport.sys_runTransport()
         );
     }
@@ -113,7 +114,7 @@ public class RobotContainer {
         
     
         NamedCommands.registerCommand("transport wait shoot", createShootCommand());
-        NamedCommands.registerCommand("shoot work", shooterSubsystem.sys_manualShoot(50));
+        NamedCommands.registerCommand("shoot work", shooterSubsystem.sys_manualShoot(ShooterConstants.kNearShootRps));
 
         NamedCommands.registerCommand("Auto Shoot", createAutoShootCommand());
         NamedCommands.registerCommand("Far Auto Shoot", createFarAutoShootCommand());
@@ -254,9 +255,9 @@ public class RobotContainer {
         // 手動射擊：按住右板機 → 啟動 Shooter 到 50 RPS，達速後自動送球
         driverController.rightTrigger(0.1).whileTrue(
             Commands.parallel(
-                shooterSubsystem.sys_manualShoot(50),
+                shooterSubsystem.sys_manualShoot(ShooterConstants.kNearShootRps),
                 Commands.sequence(
-                    Commands.waitUntil(() -> shooterSubsystem.isAtSpeed(50)),
+                    Commands.waitUntil(() -> shooterSubsystem.isAtSpeed(ShooterConstants.kNearShootRps)),
                     transport.sys_runTransport()
                 )
             )

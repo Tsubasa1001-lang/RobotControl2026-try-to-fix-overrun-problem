@@ -4,6 +4,7 @@ import edu.wpi.first.math.controller.PIDController;
 import edu.wpi.first.math.kinematics.ChassisSpeeds;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj2.command.Command;
+import frc.robot.Constants.Drive2TagConstants;
 import frc.robot.LimelightHelpers;
 import frc.robot.subsystems.Swerve;
 
@@ -12,9 +13,12 @@ public class Drive2Tag extends Command {
     private final String m_limelightName;
 
     // 定義 PID Controller
-    private final PIDController xController = new PIDController(0.8, 0.001, 0); // 需調整 kP
-    private final PIDController yController = new PIDController(0.25, 0.001, 0); // 需調整 kP
-    private final PIDController thetaController = new PIDController(0.008, 0, 0); // 需調整 kP
+    private final PIDController xController = new PIDController(
+        Drive2TagConstants.kX_kP, Drive2TagConstants.kX_kI, Drive2TagConstants.kX_kD);
+    private final PIDController yController = new PIDController(
+        Drive2TagConstants.kY_kP, Drive2TagConstants.kY_kI, Drive2TagConstants.kY_kD);
+    private final PIDController thetaController = new PIDController(
+        Drive2TagConstants.kTheta_kP, Drive2TagConstants.kTheta_kI, Drive2TagConstants.kTheta_kD);
 
     // 新增變數：用來存儲我們想要的目標位置
     private final double m_targetX;
@@ -41,9 +45,9 @@ public class Drive2Tag extends Command {
         addRequirements(m_swerve);
 
         // 設定容許誤差
-        xController.setTolerance(0.01); 
-        yController.setTolerance(0.01);
-        thetaController.setTolerance(2.0);
+        xController.setTolerance(Drive2TagConstants.kXTolerance); 
+        yController.setTolerance(Drive2TagConstants.kYTolerance);
+        thetaController.setTolerance(Drive2TagConstants.kThetaTolerance);
     }
 
     @Override
@@ -80,14 +84,14 @@ public class Drive2Tag extends Command {
 
                 // SmartDashboard.putBoolean("Drive2Tag/AtSetpoint", xController.atSetpoint());
                 
-                xSpeed*=6.0;
-                ySpeed*=6.0;
-                thetaSpeed*=6.0;
+                xSpeed *= Drive2TagConstants.kSpeedMultiplier;
+                ySpeed *= Drive2TagConstants.kSpeedMultiplier;
+                thetaSpeed *= Drive2TagConstants.kSpeedMultiplier;
                 
                 // 限制輸出速度 (Clamp)
-                xSpeed = Math.max(-1.8, Math.min(1.8, xSpeed));
-                ySpeed = Math.max(-1.8, Math.min(1.8, ySpeed));
-                thetaSpeed = Math.max(-1.5, Math.min(1.5, thetaSpeed));
+                xSpeed = Math.max(-Drive2TagConstants.kMaxTranslationSpeed, Math.min(Drive2TagConstants.kMaxTranslationSpeed, xSpeed));
+                ySpeed = Math.max(-Drive2TagConstants.kMaxTranslationSpeed, Math.min(Drive2TagConstants.kMaxTranslationSpeed, ySpeed));
+                thetaSpeed = Math.max(-Drive2TagConstants.kMaxRotationSpeed, Math.min(Drive2TagConstants.kMaxRotationSpeed, thetaSpeed));
 
 
                 // xSpeed = 0;

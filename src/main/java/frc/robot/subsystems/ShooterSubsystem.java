@@ -18,16 +18,13 @@ import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
 import com.ctre.phoenix6.signals.MotorAlignmentValue;
+import frc.robot.Constants.ShooterConstants;
 import frc.robot.util.TunableNumber;
 
 public class ShooterSubsystem extends SubsystemBase {
     private final TalonFX leaderMotor;
     private final TalonFX followerMotor;
     private final VelocityVoltage velocityRequest = new VelocityVoltage(0);
-
-    private  double Target_RPS = 50.0;
-    
-    private final double TRIGGER_DEADBAND = 0.05; 
 
     // ── Shuffleboard 即時調參 ──
     private TunableNumber tunableKV;
@@ -48,16 +45,16 @@ public class ShooterSubsystem extends SubsystemBase {
     }
 
     public ShooterSubsystem(ShuffleboardTab tab) {
-        leaderMotor = new TalonFX(22);
-        followerMotor = new TalonFX(21);
+        leaderMotor = new TalonFX(ShooterConstants.kLeaderMotorID);
+        followerMotor = new TalonFX(ShooterConstants.kFollowerMotorID);
 
         // ── 初始化可調參數 ──
         if (tab != null) {
-            tunableKV = new TunableNumber(tab, "kV", 0.12);
-            tunableKP = new TunableNumber(tab, "kP", 0.12);
-            tunableKI = new TunableNumber(tab, "kI", 0.0);
-            tunableKD = new TunableNumber(tab, "kD", 0.0);
-            tunableKS = new TunableNumber(tab, "kS", 0.0);
+            tunableKV = new TunableNumber(tab, "kV", ShooterConstants.kDefaultKV);
+            tunableKP = new TunableNumber(tab, "kP", ShooterConstants.kDefaultKP);
+            tunableKI = new TunableNumber(tab, "kI", ShooterConstants.kDefaultKI);
+            tunableKD = new TunableNumber(tab, "kD", ShooterConstants.kDefaultKD);
+            tunableKS = new TunableNumber(tab, "kS", ShooterConstants.kDefaultKS);
 
             // ── 遙測示波圖 ──
             currentRpsEntry = tab.add("Current RPS", 0)
@@ -76,11 +73,11 @@ public class ShooterSubsystem extends SubsystemBase {
                 .withWidget(BuiltInWidgets.kTextView)
                 .withSize(1, 1).withPosition(3, 3).getEntry();
         } else {
-            tunableKV = new TunableNumber("Shooter/kV", 0.12);
-            tunableKP = new TunableNumber("Shooter/kP", 0.12);
-            tunableKI = new TunableNumber("Shooter/kI", 0.0);
-            tunableKD = new TunableNumber("Shooter/kD", 0.0);
-            tunableKS = new TunableNumber("Shooter/kS", 0.0);
+            tunableKV = new TunableNumber("Shooter/kV", ShooterConstants.kDefaultKV);
+            tunableKP = new TunableNumber("Shooter/kP", ShooterConstants.kDefaultKP);
+            tunableKI = new TunableNumber("Shooter/kI", ShooterConstants.kDefaultKI);
+            tunableKD = new TunableNumber("Shooter/kD", ShooterConstants.kDefaultKD);
+            tunableKS = new TunableNumber("Shooter/kS", ShooterConstants.kDefaultKS);
         }
 
         TalonFXConfiguration config = new TalonFXConfiguration();

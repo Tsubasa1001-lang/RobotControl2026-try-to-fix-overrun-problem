@@ -5,18 +5,12 @@ import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.button.CommandXboxController;
 import frc.robot.Constants.AutoAimConstants;
+import frc.robot.Constants.ManualDriveConstants;
 import frc.robot.Constants.SwerveConstants;
 import frc.robot.subsystems.Swerve;
 import frc.robot.subsystems.Swerve.SwerveMode;
 
 public class ManualDrive extends Command {
-
-    private static final double X_MULTIPLIER = 1;
-    private static final double Y_MULTIPLIER = 1;
-    private static final double Z_MULTIPLIER = -0.4;
-    private static final double X_NULL_ZONE = 0.05;
-    private static final double Y_NULL_ZONE = 0.05;
-    private static final double Z_NULL_ZONE = 0.05;
     
     private final Swerve mSwerve;
     private final CommandXboxController mJoystick;
@@ -59,14 +53,14 @@ public class ManualDrive extends Command {
         double boostTranslation = mJoystick.rightBumper().getAsBoolean()?1:0.5;
         // double boostTranslation = 1;
         
-        xCtl = calculateNullZone(xCtl, X_NULL_ZONE);
-        xCtl *= X_MULTIPLIER;
+        xCtl = calculateNullZone(xCtl, ManualDriveConstants.kXDeadzone);
+        xCtl *= ManualDriveConstants.kXMultiplier;
         xCtl *= boostTranslation;
-        yCtl = calculateNullZone(yCtl, Y_NULL_ZONE);
-        yCtl *= Y_MULTIPLIER;
+        yCtl = calculateNullZone(yCtl, ManualDriveConstants.kYDeadzone);
+        yCtl *= ManualDriveConstants.kYMultiplier;
         yCtl *= boostTranslation;
-        zCtl = calculateNullZone(zCtl, Z_NULL_ZONE);
-        zCtl *= Z_MULTIPLIER;
+        zCtl = calculateNullZone(zCtl, ManualDriveConstants.kZDeadzone);
+        zCtl *= ManualDriveConstants.kZMultiplier;
 
         // ═══════════════ 射擊模式 ═══════════════
         // 鎖定旋轉（AutoAim PID 會透過 setAimSpeed 疊加控制旋轉）

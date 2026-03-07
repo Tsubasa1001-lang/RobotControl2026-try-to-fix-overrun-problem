@@ -15,6 +15,7 @@ import edu.wpi.first.wpilibj.shuffleboard.ShuffleboardTab;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
+import frc.robot.Constants.IntakeRollerConstants;
 import frc.robot.util.TunableNumber;
 
 
@@ -23,12 +24,6 @@ public class IntakeRollerSubsystem extends SubsystemBase {
     private final TalonFX followerMotor;
 
     private final VelocityVoltage velocityRequest = new VelocityVoltage(0);
-
-    private static final double INTAKE_TARGET_RPS = 60.0;
-    private static final double OUTTAKE_TARGET_RPS = -30.0;
-
-    private static final double STATOR_CURRENT_LIMIT = 60.0;
-    private static final double SUPPLY_CURRENT_LIMIT = 40.0;
 
     // ── Shuffleboard 即時調參 ──
     private TunableNumber tunableKV;
@@ -48,15 +43,15 @@ public class IntakeRollerSubsystem extends SubsystemBase {
     }
 
     public IntakeRollerSubsystem(ShuffleboardTab tab) {
-        leaderMotor = new TalonFX(29);
-        followerMotor = new TalonFX(35);
+        leaderMotor = new TalonFX(IntakeRollerConstants.kLeaderMotorID);
+        followerMotor = new TalonFX(IntakeRollerConstants.kFollowerMotorID);
 
         // ── 初始化可調參數 ──
         if (tab != null) {
-            tunableKV = new TunableNumber(tab, "kV", 0.12);
-            tunableKP = new TunableNumber(tab, "kP", 0.2);
-            tunableKI = new TunableNumber(tab, "kI", 0.01);
-            tunableKD = new TunableNumber(tab, "kD", 0.0);
+            tunableKV = new TunableNumber(tab, "kV", IntakeRollerConstants.kDefaultKV);
+            tunableKP = new TunableNumber(tab, "kP", IntakeRollerConstants.kDefaultKP);
+            tunableKI = new TunableNumber(tab, "kI", IntakeRollerConstants.kDefaultKI);
+            tunableKD = new TunableNumber(tab, "kD", IntakeRollerConstants.kDefaultKD);
 
             actualRpsEntry = tab.add("Actual RPS", 0)
                 .withWidget(BuiltInWidgets.kGraph)
@@ -74,10 +69,10 @@ public class IntakeRollerSubsystem extends SubsystemBase {
                 .withWidget(BuiltInWidgets.kTextView)
                 .withSize(1, 1).withPosition(3, 3).getEntry();
         } else {
-            tunableKV = new TunableNumber("IntakeRoller/kV", 0.12);
-            tunableKP = new TunableNumber("IntakeRoller/kP", 0.2);
-            tunableKI = new TunableNumber("IntakeRoller/kI", 0.01);
-            tunableKD = new TunableNumber("IntakeRoller/kD", 0.0);
+            tunableKV = new TunableNumber("IntakeRoller/kV", IntakeRollerConstants.kDefaultKV);
+            tunableKP = new TunableNumber("IntakeRoller/kP", IntakeRollerConstants.kDefaultKP);
+            tunableKI = new TunableNumber("IntakeRoller/kI", IntakeRollerConstants.kDefaultKI);
+            tunableKD = new TunableNumber("IntakeRoller/kD", IntakeRollerConstants.kDefaultKD);
         }
 
         TalonFXConfiguration config = new TalonFXConfiguration();
@@ -95,9 +90,9 @@ public class IntakeRollerSubsystem extends SubsystemBase {
 
         // 2. 電流限制
         config.CurrentLimits.StatorCurrentLimitEnable = true;
-        config.CurrentLimits.StatorCurrentLimit = STATOR_CURRENT_LIMIT;
+        config.CurrentLimits.StatorCurrentLimit = IntakeRollerConstants.kStatorCurrentLimit;
         config.CurrentLimits.SupplyCurrentLimitEnable = true;
-        config.CurrentLimits.SupplyCurrentLimit = SUPPLY_CURRENT_LIMIT;
+        config.CurrentLimits.SupplyCurrentLimit = IntakeRollerConstants.kSupplyCurrentLimit;
 
         // 3. Brake 模式：停止吸球時立刻煞車，防止球慣性滑出
         config.MotorOutput.NeutralMode = NeutralModeValue.Brake;
@@ -112,9 +107,9 @@ public class IntakeRollerSubsystem extends SubsystemBase {
         followerConfig.Slot0.kI = tunableKI.get();
         followerConfig.Slot0.kD = tunableKD.get();
         followerConfig.CurrentLimits.StatorCurrentLimitEnable = true;
-        followerConfig.CurrentLimits.StatorCurrentLimit = STATOR_CURRENT_LIMIT;
+        followerConfig.CurrentLimits.StatorCurrentLimit = IntakeRollerConstants.kStatorCurrentLimit;
         followerConfig.CurrentLimits.SupplyCurrentLimitEnable = true;
-        followerConfig.CurrentLimits.SupplyCurrentLimit = SUPPLY_CURRENT_LIMIT;
+        followerConfig.CurrentLimits.SupplyCurrentLimit = IntakeRollerConstants.kSupplyCurrentLimit;
         followerConfig.MotorOutput.NeutralMode = NeutralModeValue.Brake;
         followerConfig.MotorOutput.Inverted = InvertedValue.Clockwise_Positive;
         followerMotor.getConfigurator().apply(followerConfig);
@@ -150,7 +145,7 @@ public class IntakeRollerSubsystem extends SubsystemBase {
     public Command sys_intakeWithTrigger() {
         return this.runEnd(
             () -> {
-                setVelocity(INTAKE_TARGET_RPS);
+                setVelocity(IntakeRollerConstants.kIntakeTargetRps);
             },
             () -> {
                 stop();
@@ -164,7 +159,7 @@ public class IntakeRollerSubsystem extends SubsystemBase {
     public Command sys_outtake() {
         return this.runEnd(
             () -> {
-                setVelocity(OUTTAKE_TARGET_RPS);
+                setVelocity(IntakeRollerConstants.kOuttakeTargetRps);
             },
             () -> {
                 stop();

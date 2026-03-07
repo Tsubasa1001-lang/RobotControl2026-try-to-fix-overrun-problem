@@ -102,6 +102,127 @@ public final class Constants {
     public static final int kSwerveControllerPort = 0;
   }
 
+  // ===== 射手 (Shooter) 常數 =====
+  public static final class ShooterConstants {
+    // ── 硬體 CAN ID ──
+    public static final int kLeaderMotorID = 22;
+    public static final int kFollowerMotorID = 21;
+
+    // ── 速度目標 (RPS) ──
+    public static final int kNearShootRps = 50;    // 近距離射擊 (Auto Shoot / 手動射擊)
+    public static final int kFarShootRps = 62;     // 遠距離射擊 (Far Auto Shoot)
+    public static final double kDefaultTargetRps = 50.0;
+
+    // ── PID 初始值 (Slot 0, VelocityVoltage) ──
+    // ⚠ 透過 Shuffleboard TunableNumber 可即時調參，這裡是開機預設值
+    public static final double kDefaultKV = 0.12;
+    public static final double kDefaultKP = 0.12;
+    public static final double kDefaultKI = 0.0;
+    public static final double kDefaultKD = 0.0;
+    public static final double kDefaultKS = 0.0;
+
+    // ── 其他 ──
+    public static final double kTriggerDeadband = 0.05;
+  }
+
+  // ===== 輸送帶 (Transport) 常數 =====
+  public static final class TransportConstants {
+    // ── 硬體 CAN ID ──
+    public static final int kUpToShootMotorID = 26;
+    public static final int kTransportMotorID = 30;
+
+    // ── 速度目標 (RPS) ──
+    public static final double kTransportRps = 35.0;       // 輸送帶正常速度
+    public static final double kUpToShootRps = 80.0;       // 上膛推球速度
+    public static final double kSlowTransportRps = 18.0;   // 慢速輸送帶 (Intake 時)
+
+    // ── PID 初始值 (Slot 0, VelocityVoltage) ──
+    public static final double kDefaultKV = 0.12;
+    public static final double kDefaultKP = 0.2;
+    public static final double kDefaultKI = 0.0;
+    public static final double kDefaultKD = 0.0;
+
+    // ── 電流限制 ──
+    public static final double kStatorCurrentLimit = 60.0;
+    public static final double kSupplyCurrentLimit = 40.0;
+  }
+
+  // ===== Intake 滾輪 (IntakeRoller) 常數 =====
+  public static final class IntakeRollerConstants {
+    // ── 硬體 CAN ID ──
+    public static final int kLeaderMotorID = 29;
+    public static final int kFollowerMotorID = 35;
+
+    // ── 速度目標 (RPS) ──
+    public static final double kIntakeTargetRps = 60.0;
+    public static final double kOuttakeTargetRps = -30.0;
+
+    // ── PID 初始值 (Slot 0, VelocityVoltage) ──
+    public static final double kDefaultKV = 0.12;
+    public static final double kDefaultKP = 0.2;
+    public static final double kDefaultKI = 0.01;
+    public static final double kDefaultKD = 0.0;
+
+    // ── 電流限制 ──
+    public static final double kStatorCurrentLimit = 60.0;
+    public static final double kSupplyCurrentLimit = 40.0;
+  }
+
+  // ===== Intake 手臂 (IntakeArm) 常數 =====
+  public static final class IntakeArmConstants {
+    // ── 硬體 CAN ID ──
+    public static final int kLeaderMotorID = 3;
+    public static final int kFollowerMotorID = 4;
+
+    // ── 機構參數 ──
+    public static final double kGearRatio = 20.0;
+
+    // ── PID 初始值 (Slot 0, PositionVoltage) ──
+    public static final double kDefaultKP = 2.0;
+    public static final double kDefaultKI = 0.0;
+    public static final double kDefaultKD = 0.1;
+    public static final double kDefaultKG = 0.1;  // 重力補償
+  }
+
+  // ===== 手動駕駛 (ManualDrive) 常數 =====
+  public static final class ManualDriveConstants {
+    // ── 搖桿倍率 ──
+    public static final double kXMultiplier = 1.0;
+    public static final double kYMultiplier = 1.0;
+    public static final double kZMultiplier = -0.4;
+
+    // ── 搖桿死區 ──
+    public static final double kXDeadzone = 0.05;
+    public static final double kYDeadzone = 0.05;
+    public static final double kZDeadzone = 0.05;
+  }
+
+  // ===== AprilTag 對位 (Drive2Tag) 常數 =====
+  public static final class Drive2TagConstants {
+    // ── PID ──
+    public static final double kX_kP = 0.8;
+    public static final double kX_kI = 0.001;
+    public static final double kX_kD = 0.0;
+
+    public static final double kY_kP = 0.25;
+    public static final double kY_kI = 0.001;
+    public static final double kY_kD = 0.0;
+
+    public static final double kTheta_kP = 0.008;
+    public static final double kTheta_kI = 0.0;
+    public static final double kTheta_kD = 0.0;
+
+    // ── 容許誤差 ──
+    public static final double kXTolerance = 0.01;     // 公尺
+    public static final double kYTolerance = 0.01;     // 公尺
+    public static final double kThetaTolerance = 2.0;  // 度
+
+    // ── 輸出限制 ──
+    public static final double kSpeedMultiplier = 6.0;
+    public static final double kMaxTranslationSpeed = 1.8;  // m/s
+    public static final double kMaxRotationSpeed = 1.5;     // rad/s
+  }
+
   public static final class RoboArmConstants {
     public static final int kShooterLeftMotorID = 21;
     
