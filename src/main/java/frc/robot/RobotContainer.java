@@ -230,13 +230,25 @@ public class RobotContainer {
         // );
 
         // 自動瞄準射擊：按住 Left Bumper 時自動旋轉面向目標 + 依距離調整射手速度 + 達速對準後自動發射
+        // ⚠️ 與 Drive2Tag (A鍵) 互斥：
+        //   - Drive2Tag addRequirements(swerve) → 會中斷 ManualDrive
+        //   - AutoAimAndShoot 不佔 swerve（透過 setAimSpeed 疊加）
+        //   - 若同時按 A + LB，兩者會同時控制底盤打架
+        //   → 解法：Drive2Tag 綁定時額外 require shooter+transport，讓 scheduler 自動互斥
         driverController.leftBumper().whileTrue(
             new AutoAimAndShoot(swerve, shooterSubsystem, transport, manualDriveCommand, shuffleboardManager.getAutoAimTab())
         );
 
-        // 3. 中間模式 (例如按 A 鍵)
+        // Drive2Tag：按住 A 鍵自動對位 AprilTag
+        // 額外 require shooter + transport → 若 AutoAimAndShoot 正在運行會被自動取消
         driverController.a().whileTrue(
             new Drive2Tag(swerve, Constants.kLimelightName, -1.15, 0.0, 0.0)
+                .alongWith(
+                    Commands.runOnce(() -> {
+                        shooterSubsystem.stopShooter();
+                        transport.stopTransport();
+                    }, shooterSubsystem, transport)
+                )
         );
 
         // 手動射擊：按住右板機 → 啟動 Shooter 到 50 RPS，達速後自動送球

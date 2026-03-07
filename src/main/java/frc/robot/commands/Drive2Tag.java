@@ -1,6 +1,7 @@
 package frc.robot.commands;
 
 import edu.wpi.first.math.controller.PIDController;
+import edu.wpi.first.math.kinematics.ChassisSpeeds;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj2.command.Command;
 import frc.robot.LimelightHelpers;
@@ -48,6 +49,8 @@ public class Drive2Tag extends Command {
     @Override
     public void initialize() {
         LimelightHelpers.setPipelineIndex(m_limelightName, 1);
+        // 清除可能殘留的 AutoAim 旋轉疊加，避免兩個 Command 打架
+        m_swerve.setAimSpeed(new ChassisSpeeds(0, 0, 0));
     }
 
     @Override
@@ -102,6 +105,7 @@ public class Drive2Tag extends Command {
     @Override
     public void end(boolean interrupted) {
         m_swerve.setSpeed(0, 0, 0, false);
+        m_swerve.setAimSpeed(new ChassisSpeeds(0, 0, 0));
         LimelightHelpers.setPipelineIndex(m_limelightName, 0);
     }
 }

@@ -226,17 +226,14 @@ public class AutoAimAndShoot extends Command {
         
         boolean isAtSpeed = m_shooter.isAtSpeed(targetRps, AutoAimConstants.kShooterToleranceRps);
 
-        // 11. Transport 輸送帶一直運轉，預送球到待發位置
-        m_transport.runTransportOnly();
-
-        // 12. 角度對齊 + 射手達速 → 啟動 up_to_shoot 推球進射手飛輪
+        // 11~12. 角度對齊 + 射手達速 → 同時啟動 transport + up_to_shoot 送球
+        //        兩顆馬達同時啟動、同時停止，確保送球一致性
         if (isAligned && isAtSpeed) {
-            m_transport.runUpToShoot();
+            m_transport.runTransport();     // 同時啟動 transport + up_to_shoot
             m_isFeeding = true;
         } else {
-            // 超出遲滯範圍或射手失速 → 停止推球（但輸送帶繼續）
-            // ⚠ DutyCycleOut 是 set-and-hold，不主動停止 up_to_shoot 它會繼續轉
-            m_transport.stopUpToShoot();
+            // 超出遲滯範圍或射手失速 → 同時停止兩顆馬達
+            m_transport.stopTransport();
             m_isFeeding = false;
         }
 
