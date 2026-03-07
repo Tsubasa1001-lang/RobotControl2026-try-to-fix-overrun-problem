@@ -66,6 +66,9 @@ public class Swerve extends SubsystemBase {
     private GenericEntry chassisVxEntry, chassisVyEntry, chassisOmegaEntry;
     private GenericEntry gyroAngleEntry;
     private GenericEntry mod0SpeedEntry, mod0AngleEntry;
+    // Vision 遙測
+    private GenericEntry visionTagCountEntry, visionRejectedEntry;
+    private GenericEntry visionPoseXEntry, visionPoseYEntry;
 
     public Swerve() {
         initFields();
@@ -107,6 +110,16 @@ public class Swerve extends SubsystemBase {
                 .withWidget(BuiltInWidgets.kTextView).withSize(2, 1).withPosition(2, 2).getEntry();
         mod0AngleEntry = tab.add("Mod0 Angle", 0)
                 .withWidget(BuiltInWidgets.kTextView).withSize(2, 1).withPosition(4, 2).getEntry();
+
+        // ── Vision 遙測 ──
+        visionTagCountEntry = tab.add("Vision Tags", 0)
+                .withWidget(BuiltInWidgets.kTextView).withSize(2, 1).withPosition(6, 2).getEntry();
+        visionRejectedEntry = tab.add("Vision Rejected", false)
+                .withWidget(BuiltInWidgets.kBooleanBox).withSize(2, 1).withPosition(8, 2).getEntry();
+        visionPoseXEntry = tab.add("Vision X", 0)
+                .withWidget(BuiltInWidgets.kTextView).withSize(2, 1).withPosition(6, 3).getEntry();
+        visionPoseYEntry = tab.add("Vision Y", 0)
+                .withWidget(BuiltInWidgets.kTextView).withSize(2, 1).withPosition(8, 3).getEntry();
     }
 
     /**
@@ -164,46 +177,67 @@ public class Swerve extends SubsystemBase {
         // 取得基本感測器數據
         Rotation2d gyroAngle = getGyroAngle();
         SwerveModulePosition[] modulePositions = getModulePositions();
-        // isUseLimelight = 0;
+
         if (isUseLimelight && poseEstimator != null) {
+            // ① 底盤推算更新（主要座標來源）
             poseEstimator.update(gyroAngle, modulePositions);
 
+            // ② Limelight 視覺融合（輔助校正，防止打滑導致座標偏移）
             if (limelightName != null) {
+                // 告訴 Limelight 目前 IMU 角度，讓 MegaTag2 演算法更精準
                 LimelightHelpers.SetRobotOrientation_NoFlush(limelightName, 
                     gyroAngle.getDegrees(), getGyroRateDps(), 0, 0, 0, 0);
                 
-                LimelightHelpers.PoseEstimate mt2;
-                // if(isAllianceRed()){
-                //     mt2 = LimelightHelpers.getBotPoseEstimate_wpiRed(limelightName);
-                // }
-                // else{
-                    mt2 = LimelightHelpers.getBotPoseEstimate_wpiBlue(limelightName);
-                // }
+                // 統一使用藍方原點座標系（WPILib 標準）
+                // PathPlanner 的 isAllianceRed() 會自動鏡射路徑，不需要手動切換紅方座標
+                LimelightHelpers.PoseEstimate mt2 = 
+                    LimelightHelpers.getBotPoseEstimate_wpiBlue(limelightName);
                 
                 boolean doRejectUpdate = false;
 
-                if (mt2 != null && mt2.tagCount > 0 && mt2.rawFiducials != null && mt2.rawFiducials.length > 0) {
-                    
+                if (mt2 == null || mt2.tagCount == 0 
+                    || mt2.rawFiducials == null || mt2.rawFiducials.length == 0) {
+                    // 沒看到任何 AprilTag → 不更新
+                    doRejectUpdate = true;
+                } else {
+                    // ── 過濾不可靠的視覺資料 ──
                     if (mt2.tagCount == 1) {
-                        // 檢查第一個 Tag 是否可靠
-                        if (mt2.rawFiducials[0].ambiguity > 0.7 || mt2.rawFiducials[0].distToCamera > 4.0) {
-                            doRejectUpdate = true;
-                        }
+                        // 只看到 1 個 Tag：檢查可靠度
+                        if (mt2.rawFiducials[0].ambiguity > 0.7) doRejectUpdate = true;
+                        if (mt2.rawFiducials[0].distToCamera > 4.0) doRejectUpdate = true;
                     }
-                    
+                    // 多個 Tag（tagCount >= 2）：交叉定位精度高，跳過 ambiguity/distance 檢查
+
+                    // 機器人高速旋轉時影像模糊，不融合
                     if (Math.abs(getGyroRateDps()) > 720) doRejectUpdate = true;
+                }
 
-                    if (!doRejectUpdate) {
-                        // 正常更新
-                        poseEstimator.setVisionMeasurementStdDevs(VecBuilder.fill(0.5, 0.5, 999999));
-                        poseEstimator.addVisionMeasurement(mt2.pose, mt2.timestampSeconds);
+                if (!doRejectUpdate) {
+                    // ── 動態信任度：看到越多 Tag → 越信任 Limelight ──
+                    double xyStdDev;
+                    if (mt2.tagCount >= 2) {
+                        xyStdDev = 0.3; // 多 Tag 交叉定位，高信任
+                    } else {
+                        // 單 Tag：根據距離動態調整（越遠越不信任）
+                        double dist = mt2.rawFiducials[0].distToCamera;
+                        xyStdDev = 0.5 + (dist * 0.15); // 1m→0.65, 3m→0.95
+                    }
 
-                        // 儀表板更新寫在 if 裡面，避免 mt2 為空時崩潰
-                        // SmartDashboard.putNumber("Vision/Tag Count", mt2.tagCount);
-                        // SmartDashboard.putNumber("Vision/MT2 Pose X", mt2.pose.getX());
+                    // 角度永遠不融合（999999），完全信任 IMU
+                    poseEstimator.setVisionMeasurementStdDevs(
+                        VecBuilder.fill(xyStdDev, xyStdDev, 999999));
+                    poseEstimator.addVisionMeasurement(mt2.pose, mt2.timestampSeconds);
+                }
+
+                // ── Vision 遙測輸出到 Shuffleboard ──
+                if (visionTagCountEntry != null) {
+                    visionTagCountEntry.setDouble(mt2 != null ? mt2.tagCount : 0);
+                    visionRejectedEntry.setBoolean(doRejectUpdate);
+                    if (mt2 != null && mt2.tagCount > 0) {
+                        visionPoseXEntry.setDouble(mt2.pose.getX());
+                        visionPoseYEntry.setDouble(mt2.pose.getY());
                     }
                 }
-                // SmartDashboard.putBoolean("Vision/Is Rejected", doRejectUpdate);
             }
         } else if (mOdometry != null) {
             mOdometry.update(gyroAngle, modulePositions);
@@ -479,12 +513,14 @@ public class Swerve extends SubsystemBase {
     }
 
     /**
-     * 用 Limelight 校正 XY 位置，但角度保持使用 IMU
-     * （因為 Limelight 角度可能有偏差，IMU 的角度更可靠）
+     * 用 Limelight 校正 XY 位置，角度保持使用 IMU。
+     * 統一使用藍方原點座標系（WPILib 標準）。
+     * 在 teleopInit() 呼叫，消除 Auto 累積的位移誤差。
      */
     public void resetPoseToLimelight() {
-        LimelightHelpers.PoseEstimate mt2;
-        mt2 = LimelightHelpers.getBotPoseEstimate_wpiBlue(limelightName);
+        LimelightHelpers.PoseEstimate mt2 = 
+            LimelightHelpers.getBotPoseEstimate_wpiBlue(limelightName);
+
         if (mt2 != null && mt2.tagCount > 0) {
             // 只使用 Limelight 的 XY 位置，角度保持 IMU 的值
             Pose2d correctedPose = new Pose2d(
@@ -492,10 +528,6 @@ public class Swerve extends SubsystemBase {
                 getGyroAngle()              // 角度來自 IMU
             );
             this.setPose(correctedPose);
-            SmartDashboard.putString("Vision/LimelightReset", 
-                "XY校正成功! x=" + mt2.pose.getX() + " y=" + mt2.pose.getY() + " (角度保持IMU)");
-        } else {
-            SmartDashboard.putString("Vision/LimelightReset", "找不到 AprilTag，無法校正位置");
         }
     }
 

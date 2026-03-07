@@ -1,5 +1,6 @@
 package frc.robot.commands;
 
+import edu.wpi.first.math.MathUtil;
 import edu.wpi.first.math.controller.PIDController;
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Translation2d;
@@ -9,6 +10,7 @@ import edu.wpi.first.wpilibj.shuffleboard.ShuffleboardTab;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj2.command.Command;
 import frc.robot.Constants.AutoAimConstants;
+import frc.robot.commands.ManualDrive;
 import frc.robot.subsystems.ShooterSubsystem;
 import frc.robot.subsystems.Swerve;
 import frc.robot.subsystems.TransportSubsystem;
@@ -30,6 +32,7 @@ public class AutoAimAndShoot extends Command {
     private final Swerve m_swerve;
     private final ShooterSubsystem m_shooter;
     private final TransportSubsystem m_transport;
+    private final ManualDrive m_manualDrive; // 用於控制射擊模式
 
     // 旋轉 PID 控制器
     private final PIDController m_rotationPID;
@@ -50,14 +53,15 @@ public class AutoAimAndShoot extends Command {
     // 狀態追蹤
     private boolean m_isFeeding = false;
 
-    public AutoAimAndShoot(Swerve swerve, ShooterSubsystem shooter, TransportSubsystem transport) {
-        this(swerve, shooter, transport, null);
+    public AutoAimAndShoot(Swerve swerve, ShooterSubsystem shooter, TransportSubsystem transport, ManualDrive manualDrive) {
+        this(swerve, shooter, transport, manualDrive, null);
     }
 
-    public AutoAimAndShoot(Swerve swerve, ShooterSubsystem shooter, TransportSubsystem transport, ShuffleboardTab tab) {
+    public AutoAimAndShoot(Swerve swerve, ShooterSubsystem shooter, TransportSubsystem transport, ManualDrive manualDrive, ShuffleboardTab tab) {
         m_swerve = swerve;
         m_shooter = shooter;
         m_transport = transport;
+        m_manualDrive = manualDrive;
 
         // ── 調參：使用 Shuffleboard Tab 或 SmartDashboard ──
         if (tab != null) {
@@ -100,6 +104,11 @@ public class AutoAimAndShoot extends Command {
     public void initialize() {
         m_rotationPID.reset();
         m_isFeeding = false;
+
+        // 啟用射擊模式：鎖定操作者旋轉、降低平移速度
+        if (m_manualDrive != null) {
+            m_manualDrive.setShootingMode(true);
+        }
 
         // 根據聯盟顏色決定目標位置
         if (m_swerve.isAllianceRed()) {
@@ -168,11 +177,13 @@ public class AutoAimAndShoot extends Command {
         }
 
         // Debug 資訊
+        // 角度誤差需要正確處理 ±π 包裝，避免顯示 ±360° 跳動
+        double angleErrorRad = MathUtil.angleModulus(targetAngleRad - currentAngleRad);
         if (distanceEntry != null) {
             distanceEntry.setDouble(distanceToTarget);
             targetAngleEntry.setDouble(Math.toDegrees(targetAngleRad));
             currentAngleEntry.setDouble(Math.toDegrees(currentAngleRad));
-            angleErrorEntry.setDouble(Math.toDegrees(targetAngleRad - currentAngleRad));
+            angleErrorEntry.setDouble(Math.toDegrees(angleErrorRad));
             rotOutputEntry.setDouble(rotationOutput);
             targetRpsEntry.setDouble(targetRps);
             currentRpsEntry.setDouble(m_shooter.getCurrentRps());
@@ -183,7 +194,7 @@ public class AutoAimAndShoot extends Command {
             SmartDashboard.putNumber("AutoAim/Distance", distanceToTarget);
             SmartDashboard.putNumber("AutoAim/TargetAngle", Math.toDegrees(targetAngleRad));
             SmartDashboard.putNumber("AutoAim/CurrentAngle", Math.toDegrees(currentAngleRad));
-            SmartDashboard.putNumber("AutoAim/AngleError", Math.toDegrees(targetAngleRad - currentAngleRad));
+            SmartDashboard.putNumber("AutoAim/AngleError", Math.toDegrees(angleErrorRad));
             SmartDashboard.putNumber("AutoAim/RotationOutput", rotationOutput);
             SmartDashboard.putNumber("AutoAim/TargetRPS", targetRps);
             SmartDashboard.putNumber("AutoAim/CurrentRPS", m_shooter.getCurrentRps());
@@ -200,6 +211,11 @@ public class AutoAimAndShoot extends Command {
         m_shooter.stopShooter();
         m_transport.stopTransport();
         m_isFeeding = false;
+
+        // 解除射擊模式：恢復正常操控
+        if (m_manualDrive != null) {
+            m_manualDrive.setShootingMode(false);
+        }
     }
 
     @Override

@@ -58,6 +58,9 @@ public final class Constants {
 
     // 射手速度容許誤差 (RPS)
     public static final double kShooterToleranceRps = 3.0;
+
+    // 射擊模式下底盤平移速度倍率（1.0 = 全速，0.3 = 30% 速度）
+    public static final double kShootingModeSpeedMultiplier = 0.3;
   }
 
   public static class OperatorConstants {

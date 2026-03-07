@@ -231,7 +231,7 @@ public class RobotContainer {
 
         // 自動瞄準射擊：按住 Left Bumper 時自動旋轉面向目標 + 依距離調整射手速度 + 達速對準後自動發射
         driverController.leftBumper().whileTrue(
-            new AutoAimAndShoot(swerve, shooterSubsystem, transport, shuffleboardManager.getAutoAimTab())
+            new AutoAimAndShoot(swerve, shooterSubsystem, transport, manualDriveCommand, shuffleboardManager.getAutoAimTab())
         );
 
         // 3. 中間模式 (例如按 A 鍵)
@@ -239,11 +239,15 @@ public class RobotContainer {
             new Drive2Tag(swerve, Constants.kLimelightName, -1.15, 0.0, 0.0)
         );
 
+        // 手動射擊：按住右板機 → 啟動 Shooter 到 50 RPS，達速後自動送球
         driverController.rightTrigger(0.1).whileTrue(
-            shooterSubsystem.sys_manualShoot(50)
-        );
-        driverController.rightTrigger(0.1).whileTrue(
-            createShootCommand()
+            Commands.parallel(
+                shooterSubsystem.sys_manualShoot(50),
+                Commands.sequence(
+                    Commands.waitUntil(() -> shooterSubsystem.isAtSpeed(50)),
+                    transport.sys_runTransport()
+                )
+            )
         );
             
         // shooterSubsystem.sys_manualShoot(1.0);

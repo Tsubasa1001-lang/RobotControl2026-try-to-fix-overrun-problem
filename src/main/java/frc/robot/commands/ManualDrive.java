@@ -4,6 +4,7 @@ import edu.wpi.first.util.sendable.SendableBuilder;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.button.CommandXboxController;
+import frc.robot.Constants.AutoAimConstants;
 import frc.robot.Constants.SwerveConstants;
 import frc.robot.subsystems.Swerve;
 import frc.robot.subsystems.Swerve.SwerveMode;
@@ -20,6 +21,11 @@ public class ManualDrive extends Command {
     private final Swerve mSwerve;
     private final CommandXboxController mJoystick;
     private boolean isFieldOriented = true;
+
+    // ═══════════════ 射擊模式 ═══════════════
+    // 啟用時：鎖定旋轉控制（z=0），降低平移速度
+    // AutoAimAndShoot 的 PID 旋轉會透過 setAimSpeed 疊加，不受影響
+    private volatile boolean shootingMode = false;
     
     public ManualDrive(Swerve drive, CommandXboxController joystick) {
         mSwerve = drive;
@@ -61,6 +67,17 @@ public class ManualDrive extends Command {
         yCtl *= boostTranslation;
         zCtl = calculateNullZone(zCtl, Z_NULL_ZONE);
         zCtl *= Z_MULTIPLIER;
+
+        // ═══════════════ 射擊模式 ═══════════════
+        // 鎖定旋轉（AutoAim PID 會透過 setAimSpeed 疊加控制旋轉）
+        // 降低平移速度，讓操作者可以微調位置但不會跑太快
+        if (shootingMode) {
+            zCtl = 0; // 旋轉歸零，完全交給 AutoAim
+            double shootingMultiplier = AutoAimConstants.kShootingModeSpeedMultiplier;
+            xCtl *= shootingMultiplier;
+            yCtl *= shootingMultiplier;
+        }
+
         // 搖桿滿推 + Boost = kMaxPhysicalSpeedMps (MK4i L3 最大速度)
         // 搖桿滿推 不按Boost = kMaxPhysicalSpeedMps * 0.5
         xCtl *= SwerveConstants.kMaxPhysicalSpeedMps;
@@ -72,6 +89,7 @@ public class ManualDrive extends Command {
         SmartDashboard.putNumber("Drive/ySpeed", yCtl);
         SmartDashboard.putNumber("Drive/zSpeed", zCtl);
         SmartDashboard.putBoolean("Drive/fieldOriented", isFieldOriented);
+        SmartDashboard.putBoolean("Drive/shootingMode", shootingMode);
     }
 
     private double calculateNullZone(double input, double nullZone) {
@@ -89,6 +107,20 @@ public class ManualDrive extends Command {
 
     public boolean getIsFieldOriented() {
         return isFieldOriented;
+    }
+
+    /**
+     * 設定射擊模式。啟用時：
+     * - 右搖桿旋轉輸入歸零（旋轉完全由 AutoAim PID 控制）
+     * - 左搖桿平移速度降低為 kShootingModeSpeedMultiplier（預設 30%）
+     * - 操作者仍可用左搖桿微調位置
+     */
+    public void setShootingMode(boolean enabled) {
+        this.shootingMode = enabled;
+    }
+
+    public boolean isShootingMode() {
+        return shootingMode;
     }
 
     @Override
