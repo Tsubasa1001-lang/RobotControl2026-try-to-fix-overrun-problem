@@ -89,6 +89,13 @@ public final class Constants {
     // 射擊模式下底盤平移速度倍率
     // 降低平移速度避免因慣性導致球射偏（1.0 = 全速，0.3 = 30% 速度）
     public static final double kShootingModeSpeedMultiplier = 0.3;
+
+    // ── 射手安裝方向偏移 ──
+    // 如果射手出口在機器人正前方（+X 方向），設為 0
+    // 如果射手出口在機器人正後方（-X 方向），設為 Math.PI
+    // 如果射手出口在其他角度，填入相應弧度值
+    // ⚠️ 請根據實際機器人射手安裝方向設定！
+    public static final double kShooterAngleOffsetRad = Math.PI; // TODO: 確認射手方向（假設射手在背面）
   }
 
   public static class OperatorConstants {

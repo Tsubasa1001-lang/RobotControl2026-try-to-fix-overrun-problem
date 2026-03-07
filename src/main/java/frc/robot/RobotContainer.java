@@ -9,7 +9,7 @@ import frc.robot.commands.Drive2Tag;
 import frc.robot.commands.ManualDrive;
 import frc.robot.commands.AutoAimAndShoot;
 // import frc.robot.subsystems.AutoAim;
-import frc.robot.subsystems.DriveSubsystem;
+// import frc.robot.subsystems.DriveSubsystem; // 已清空，不再使用
 import frc.robot.subsystems.IntakeArmSubsystem;
 import frc.robot.subsystems.IntakeRollerSubsystem;
 import frc.robot.subsystems.Swerve;
@@ -56,7 +56,7 @@ public class RobotContainer {
     new CommandXboxController(OperatorConstants.kSwerveControllerPort);
 
     private final ManualDrive manualDriveCommand = new ManualDrive(swerve, driverController);
-    private final DriveSubsystem driveSubsystem = new DriveSubsystem(swerve);
+    // DriveSubsystem 已清空（AutoBuilder 統一在 RobotContainer），不再需要實例化
     private final SendableChooser<Command> autoChooser;
 
     // ═══════════════ Shuffleboard ═══════════════
@@ -85,7 +85,7 @@ public class RobotContainer {
         return Commands.parallel(
             shooterSubsystem.sys_manualShoot(62), 
             Commands.sequence(
-                Commands.waitUntil(() -> shooterSubsystem.isAtSpeed(65)).withTimeout(2.0),
+                Commands.waitUntil(() -> shooterSubsystem.isAtSpeed(62)).withTimeout(2.0),
                 transport.sys_runTransport().withTimeout(4.0)
             )
         ).withTimeout(4.0);
@@ -314,7 +314,8 @@ public class RobotContainer {
                 Commands.runOnce(() -> driverController.setRumble(RumbleType.kBothRumble, 0)),
                 Commands.waitSeconds(0.1),
                 Commands.runOnce(() -> driverController.setRumble(RumbleType.kBothRumble, 1)),
-                Commands.waitSeconds(0.3)
+                Commands.waitSeconds(0.3),
+                Commands.runOnce(() -> driverController.setRumble(RumbleType.kBothRumble, 0))
             ).finallyDo(() -> driverController.setRumble(RumbleType.kBothRumble, 0))
         );
     }

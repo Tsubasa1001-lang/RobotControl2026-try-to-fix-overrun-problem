@@ -143,11 +143,15 @@ public class AutoAimAndShoot extends Command {
                     AutoAimConstants.kRedHubX,
                     AutoAimConstants.kRedHubY);
                 Translation2d toTarget = m_targetPosition.minus(robotPosition);
-                targetAngleRad = Math.atan2(toTarget.getY(), toTarget.getX());
+                // atan2 計算「機器人→Hub」的場地角度，再加上射手安裝偏移
+                // 如果射手在背面（offset=π），機器人需要背對 Hub 才能射中
+                targetAngleRad = Math.atan2(toTarget.getY(), toTarget.getX()) 
+                    + AutoAimConstants.kShooterAngleOffsetRad;
             } else {
                 // 中立區：朝固定角度射回紅方聯盟區（場地正右方，0°）
                 m_targetPosition = null; // 不需要目標點
-                targetAngleRad = AutoAimConstants.kRedReturnAngleRad;
+                targetAngleRad = AutoAimConstants.kRedReturnAngleRad 
+                    + AutoAimConstants.kShooterAngleOffsetRad;
             }
         } else {
             // 藍方：己方場域在 X < kFieldMidX（場地左半邊）
@@ -158,11 +162,13 @@ public class AutoAimAndShoot extends Command {
                     AutoAimConstants.kBlueHubX,
                     AutoAimConstants.kBlueHubY);
                 Translation2d toTarget = m_targetPosition.minus(robotPosition);
-                targetAngleRad = Math.atan2(toTarget.getY(), toTarget.getX());
+                targetAngleRad = Math.atan2(toTarget.getY(), toTarget.getX()) 
+                    + AutoAimConstants.kShooterAngleOffsetRad;
             } else {
                 // 中立區：朝固定角度射回藍方聯盟區（場地正左方，180°）
                 m_targetPosition = null; // 不需要目標點
-                targetAngleRad = AutoAimConstants.kBlueReturnAngleRad;
+                targetAngleRad = AutoAimConstants.kBlueReturnAngleRad 
+                    + AutoAimConstants.kShooterAngleOffsetRad;
             }
         }
 
@@ -180,6 +186,9 @@ public class AutoAimAndShoot extends Command {
 
         // 4. 目前機器人朝向
         double currentAngleRad = robotPose.getRotation().getRadians();
+
+        // 正規化目標角度到 [-π, π]（加上射手偏移後可能超出範圍）
+        targetAngleRad = MathUtil.angleModulus(targetAngleRad);
 
         // 6. PID 計算旋轉速度（不限制最大值，讓底盤全速旋轉對齊）
         double rotationOutput = m_rotationPID.calculate(currentAngleRad, targetAngleRad);
