@@ -122,10 +122,11 @@ public class IntakeRollerSubsystem extends SubsystemBase {
         followerConfig.CurrentLimits.SupplyCurrentLimitEnable = true;
         followerConfig.CurrentLimits.SupplyCurrentLimit = IntakeRollerConstants.kSupplyCurrentLimit;
         followerConfig.MotorOutput.NeutralMode = NeutralModeValue.Brake;
-        followerConfig.MotorOutput.Inverted = InvertedValue.Clockwise_Positive;
         followerMotor.getConfigurator().apply(followerConfig);
 
         // 設定 Follower 跟隨 Leader (對向安裝)
+        // 注意：在 Phoenix 6 中，Follower(..., Opposed) 會自動將輸出反向，
+        // 不需要（也不應該）在 config 裡設定 Inverted = Clockwise_Positive，否則會導致雙重反轉或衝突。
         followerMotor.setControl(new Follower(leaderMotor.getDeviceID(), MotorAlignmentValue.Opposed));
 
         // ── 快取 Status Signal 並設定 CAN 更新頻率 ──
@@ -200,7 +201,7 @@ public class IntakeRollerSubsystem extends SubsystemBase {
             newSlot0.kI = tunableKI.get();
             newSlot0.kD = tunableKD.get();
             leaderMotor.getConfigurator().apply(newSlot0);
-            followerMotor.getConfigurator().apply(newSlot0);
+            // Follower 馬達會自動套用 Leader 的輸出電壓與邏輯，不需套用 PID 參數
         }
 
         // ── 遙測數據（節流）──
