@@ -40,6 +40,7 @@ import com.pathplanner.lib.path.PathPlannerPath;
 import com.pathplanner.lib.auto.NamedCommands;
 
 import frc.robot.subsystems.ShooterSubsystem;
+import frc.robot.util.ShuffleboardManager;
 
 import java.util.logging.Logger;
 
@@ -58,9 +59,12 @@ public class RobotContainer {
     private final DriveSubsystem driveSubsystem = new DriveSubsystem(swerve);
     private final SendableChooser<Command> autoChooser;
 
-    private final ShooterSubsystem shooterSubsystem = new ShooterSubsystem();
-    // private final IntakeArmSubsystem intakeArm = new IntakeArmSubsystem();
-    private final IntakeRollerSubsystem intakeRoller = new IntakeRollerSubsystem();
+    // ═══════════════ Shuffleboard ═══════════════
+    private final ShuffleboardManager shuffleboardManager = new ShuffleboardManager();
+
+    private final ShooterSubsystem shooterSubsystem = new ShooterSubsystem(shuffleboardManager.getShooterTab());
+    // private final IntakeArmSubsystem intakeArm = new IntakeArmSubsystem(shuffleboardManager.getIntakeArmTab());
+    private final IntakeRollerSubsystem intakeRoller = new IntakeRollerSubsystem(shuffleboardManager.getIntakeRollerTab());
     private final TransportSubsystem transport = new TransportSubsystem();
 
     private Command autoCommand;
@@ -104,8 +108,8 @@ public class RobotContainer {
     public RobotContainer() {
         SignalLogger.enableAutoLogging(false);
 
-        // SmartDashboard.putData("Manual Drive", manualDriveCommand);
-        // SmartDashboard.putData("swerve", swerve);
+        // ═══════════════ Shuffleboard 初始化 ═══════════════
+        swerve.setupShuffleboardTab(shuffleboardManager.getSwerveTab());
         
     
         NamedCommands.registerCommand("transport wait shoot", createShootCommand());
@@ -152,7 +156,7 @@ public class RobotContainer {
         }
 
         autoChooser = AutoBuilder.buildAutoChooser();
-        // SmartDashboard.putData("Auto Mode", autoChooser);
+        shuffleboardManager.setupMainTab(swerve.getField2d(), autoChooser);
         
         // autoCommand = AutoBuilder.buildAuto("Simple Left Auto");
 
@@ -227,7 +231,7 @@ public class RobotContainer {
 
         // 自動瞄準射擊：按住 Left Bumper 時自動旋轉面向目標 + 依距離調整射手速度 + 達速對準後自動發射
         driverController.leftBumper().whileTrue(
-            new AutoAimAndShoot(swerve, shooterSubsystem, transport)
+            new AutoAimAndShoot(swerve, shooterSubsystem, transport, shuffleboardManager.getAutoAimTab())
         );
 
         // 3. 中間模式 (例如按 A 鍵)
@@ -287,6 +291,10 @@ public class RobotContainer {
         // swerve.run();
 
         return autoChooser.getSelected();
+    }
+
+    public ShuffleboardManager getShuffleboardManager() {
+        return shuffleboardManager;
     }
     
     public void teleopInit() {

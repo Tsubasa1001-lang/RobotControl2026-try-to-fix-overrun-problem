@@ -3,6 +3,9 @@ package frc.robot.commands;
 import edu.wpi.first.math.controller.PIDController;
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Translation2d;
+import edu.wpi.first.networktables.GenericEntry;
+import edu.wpi.first.wpilibj.shuffleboard.BuiltInWidgets;
+import edu.wpi.first.wpilibj.shuffleboard.ShuffleboardTab;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj2.command.Command;
 import frc.robot.Constants.AutoAimConstants;
@@ -31,10 +34,15 @@ public class AutoAimAndShoot extends Command {
     // 旋轉 PID 控制器
     private final PIDController m_rotationPID;
 
-    // ── Glass 即時調參 ──
-    private final TunableNumber tunableRotKP = new TunableNumber("AutoAim/Rotation kP", AutoAimConstants.kRotation_kP);
-    private final TunableNumber tunableRotKI = new TunableNumber("AutoAim/Rotation kI", AutoAimConstants.kRotation_kI);
-    private final TunableNumber tunableRotKD = new TunableNumber("AutoAim/Rotation kD", AutoAimConstants.kRotation_kD);
+    // ── 即時調參 ──
+    private final TunableNumber tunableRotKP;
+    private final TunableNumber tunableRotKI;
+    private final TunableNumber tunableRotKD;
+
+    // ── Shuffleboard 遙測 ──
+    private GenericEntry distanceEntry, targetAngleEntry, currentAngleEntry;
+    private GenericEntry angleErrorEntry, rotOutputEntry, targetRpsEntry, currentRpsEntry;
+    private GenericEntry isAlignedEntry, isAtSpeedEntry, isFeedingEntry;
 
     // 目標位置
     private Translation2d m_targetPosition;
@@ -43,9 +51,35 @@ public class AutoAimAndShoot extends Command {
     private boolean m_isFeeding = false;
 
     public AutoAimAndShoot(Swerve swerve, ShooterSubsystem shooter, TransportSubsystem transport) {
+        this(swerve, shooter, transport, null);
+    }
+
+    public AutoAimAndShoot(Swerve swerve, ShooterSubsystem shooter, TransportSubsystem transport, ShuffleboardTab tab) {
         m_swerve = swerve;
         m_shooter = shooter;
         m_transport = transport;
+
+        // ── 調參：使用 Shuffleboard Tab 或 SmartDashboard ──
+        if (tab != null) {
+            tunableRotKP = new TunableNumber(tab, "Rotation kP", AutoAimConstants.kRotation_kP);
+            tunableRotKI = new TunableNumber(tab, "Rotation kI", AutoAimConstants.kRotation_kI);
+            tunableRotKD = new TunableNumber(tab, "Rotation kD", AutoAimConstants.kRotation_kD);
+
+            distanceEntry    = tab.add("Distance", 0).withWidget(BuiltInWidgets.kTextView).withSize(2, 1).withPosition(0, 2).getEntry();
+            targetAngleEntry = tab.add("Target Angle", 0).withWidget(BuiltInWidgets.kTextView).withSize(2, 1).withPosition(2, 2).getEntry();
+            currentAngleEntry= tab.add("Current Angle", 0).withWidget(BuiltInWidgets.kTextView).withSize(2, 1).withPosition(4, 2).getEntry();
+            angleErrorEntry  = tab.add("Angle Error", 0).withWidget(BuiltInWidgets.kGraph).withSize(3, 2).withPosition(0, 3).getEntry();
+            rotOutputEntry   = tab.add("Rot Output", 0).withWidget(BuiltInWidgets.kGraph).withSize(3, 2).withPosition(3, 3).getEntry();
+            targetRpsEntry   = tab.add("Target RPS", 0).withWidget(BuiltInWidgets.kTextView).withSize(2, 1).withPosition(6, 2).getEntry();
+            currentRpsEntry  = tab.add("Current RPS", 0).withWidget(BuiltInWidgets.kTextView).withSize(2, 1).withPosition(6, 3).getEntry();
+            isAlignedEntry   = tab.add("Aligned?", false).withWidget(BuiltInWidgets.kBooleanBox).withSize(1, 1).withPosition(8, 2).getEntry();
+            isAtSpeedEntry   = tab.add("At Speed?", false).withWidget(BuiltInWidgets.kBooleanBox).withSize(1, 1).withPosition(8, 3).getEntry();
+            isFeedingEntry   = tab.add("Feeding?", false).withWidget(BuiltInWidgets.kBooleanBox).withSize(1, 1).withPosition(8, 4).getEntry();
+        } else {
+            tunableRotKP = new TunableNumber("AutoAim/Rotation kP", AutoAimConstants.kRotation_kP);
+            tunableRotKI = new TunableNumber("AutoAim/Rotation kI", AutoAimConstants.kRotation_kI);
+            tunableRotKD = new TunableNumber("AutoAim/Rotation kD", AutoAimConstants.kRotation_kD);
+        }
 
         m_rotationPID = new PIDController(
             AutoAimConstants.kRotation_kP,
@@ -134,16 +168,29 @@ public class AutoAimAndShoot extends Command {
         }
 
         // Debug 資訊
-        SmartDashboard.putNumber("AutoAim/Distance", distanceToTarget);
-        SmartDashboard.putNumber("AutoAim/TargetAngle", Math.toDegrees(targetAngleRad));
-        SmartDashboard.putNumber("AutoAim/CurrentAngle", Math.toDegrees(currentAngleRad));
-        SmartDashboard.putNumber("AutoAim/AngleError", Math.toDegrees(targetAngleRad - currentAngleRad));
-        SmartDashboard.putNumber("AutoAim/RotationOutput", rotationOutput);
-        SmartDashboard.putNumber("AutoAim/TargetRPS", targetRps);
-        SmartDashboard.putNumber("AutoAim/CurrentRPS", m_shooter.getCurrentRps());
-        SmartDashboard.putBoolean("AutoAim/IsAligned", isAligned);
-        SmartDashboard.putBoolean("AutoAim/IsAtSpeed", isAtSpeed);
-        SmartDashboard.putBoolean("AutoAim/IsFeeding", m_isFeeding);
+        if (distanceEntry != null) {
+            distanceEntry.setDouble(distanceToTarget);
+            targetAngleEntry.setDouble(Math.toDegrees(targetAngleRad));
+            currentAngleEntry.setDouble(Math.toDegrees(currentAngleRad));
+            angleErrorEntry.setDouble(Math.toDegrees(targetAngleRad - currentAngleRad));
+            rotOutputEntry.setDouble(rotationOutput);
+            targetRpsEntry.setDouble(targetRps);
+            currentRpsEntry.setDouble(m_shooter.getCurrentRps());
+            isAlignedEntry.setBoolean(isAligned);
+            isAtSpeedEntry.setBoolean(isAtSpeed);
+            isFeedingEntry.setBoolean(m_isFeeding);
+        } else {
+            SmartDashboard.putNumber("AutoAim/Distance", distanceToTarget);
+            SmartDashboard.putNumber("AutoAim/TargetAngle", Math.toDegrees(targetAngleRad));
+            SmartDashboard.putNumber("AutoAim/CurrentAngle", Math.toDegrees(currentAngleRad));
+            SmartDashboard.putNumber("AutoAim/AngleError", Math.toDegrees(targetAngleRad - currentAngleRad));
+            SmartDashboard.putNumber("AutoAim/RotationOutput", rotationOutput);
+            SmartDashboard.putNumber("AutoAim/TargetRPS", targetRps);
+            SmartDashboard.putNumber("AutoAim/CurrentRPS", m_shooter.getCurrentRps());
+            SmartDashboard.putBoolean("AutoAim/IsAligned", isAligned);
+            SmartDashboard.putBoolean("AutoAim/IsAtSpeed", isAtSpeed);
+            SmartDashboard.putBoolean("AutoAim/IsFeeding", m_isFeeding);
+        }
     }
 
     @Override

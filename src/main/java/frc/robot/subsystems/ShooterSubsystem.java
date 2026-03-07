@@ -1,5 +1,6 @@
 package frc.robot.subsystems;
 
+import java.util.Map;
 import java.util.function.DoubleSupplier;
 
 import com.ctre.phoenix6.configs.Slot0Configs;
@@ -10,6 +11,9 @@ import com.ctre.phoenix6.hardware.TalonFX;
 import com.ctre.phoenix6.signals.NeutralModeValue;
 
 import edu.wpi.first.math.MathUtil;
+import edu.wpi.first.networktables.GenericEntry;
+import edu.wpi.first.wpilibj.shuffleboard.BuiltInWidgets;
+import edu.wpi.first.wpilibj.shuffleboard.ShuffleboardTab;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
@@ -25,31 +29,72 @@ public class ShooterSubsystem extends SubsystemBase {
     
     private final double TRIGGER_DEADBAND = 0.05; 
 
-    // ── Glass 即時調參 ──
-    private final TunableNumber tunableKV = new TunableNumber("Shooter/kV", 0.12);
-    private final TunableNumber tunableKP = new TunableNumber("Shooter/kP", 0.12);
-    private final TunableNumber tunableKI = new TunableNumber("Shooter/kI", 0.0);
-    private final TunableNumber tunableKD = new TunableNumber("Shooter/kD", 0.0);
+    // ── Shuffleboard 即時調參 ──
+    private TunableNumber tunableKV;
+    private TunableNumber tunableKP;
+    private TunableNumber tunableKI;
+    private TunableNumber tunableKD;
+    private TunableNumber tunableKS;
+
+    // ── Shuffleboard 遙測 ──
+    private GenericEntry currentRpsEntry;
+    private GenericEntry targetRpsEntry;
+    private GenericEntry errorRpsEntry;
+    private GenericEntry outputVoltageEntry;
+    private GenericEntry statorCurrentEntry;
 
     public ShooterSubsystem() {
+        this(null);
+    }
+
+    public ShooterSubsystem(ShuffleboardTab tab) {
         leaderMotor = new TalonFX(22);
         followerMotor = new TalonFX(21);
+
+        // ── 初始化可調參數 ──
+        if (tab != null) {
+            tunableKV = new TunableNumber(tab, "kV", 0.12);
+            tunableKP = new TunableNumber(tab, "kP", 0.12);
+            tunableKI = new TunableNumber(tab, "kI", 0.0);
+            tunableKD = new TunableNumber(tab, "kD", 0.0);
+            tunableKS = new TunableNumber(tab, "kS", 0.0);
+
+            // ── 遙測示波圖 ──
+            currentRpsEntry = tab.add("Current RPS", 0)
+                .withWidget(BuiltInWidgets.kGraph)
+                .withSize(3, 2).withPosition(0, 2).getEntry();
+            targetRpsEntry = tab.add("Target RPS", 0)
+                .withWidget(BuiltInWidgets.kTextView)
+                .withSize(1, 1).withPosition(3, 2).getEntry();
+            errorRpsEntry = tab.add("Error RPS", 0)
+                .withWidget(BuiltInWidgets.kTextView)
+                .withSize(1, 1).withPosition(4, 2).getEntry();
+            outputVoltageEntry = tab.add("Output V", 0)
+                .withWidget(BuiltInWidgets.kGraph)
+                .withSize(3, 2).withPosition(5, 2).getEntry();
+            statorCurrentEntry = tab.add("Stator A", 0)
+                .withWidget(BuiltInWidgets.kTextView)
+                .withSize(1, 1).withPosition(3, 3).getEntry();
+        } else {
+            tunableKV = new TunableNumber("Shooter/kV", 0.12);
+            tunableKP = new TunableNumber("Shooter/kP", 0.12);
+            tunableKI = new TunableNumber("Shooter/kI", 0.0);
+            tunableKD = new TunableNumber("Shooter/kD", 0.0);
+            tunableKS = new TunableNumber("Shooter/kS", 0.0);
+        }
 
         TalonFXConfiguration config = new TalonFXConfiguration();
         config.MotorOutput.NeutralMode = NeutralModeValue.Coast;
         
-        // 記得填入你透過 Tuner X 測出的 PID 數值，否則閉環控制不會動
         config.Slot0.kV = tunableKV.get(); 
         config.Slot0.kP = tunableKP.get();
         config.Slot0.kI = tunableKI.get();
         config.Slot0.kD = tunableKD.get();
+        config.Slot0.kS = tunableKS.get();
 
         leaderMotor.getConfigurator().apply(config);
         followerMotor.getConfigurator().apply(config);
 
-        // 設定 Follower
-        // MotorAlignmentValue.Opposed  = 對向夾擠安裝（兩顆馬達面對面），正轉方向相反，需要反轉
-        // MotorAlignmentValue.SameDirection = 同向安裝，直接跟隨
         followerMotor.setControl(new Follower(leaderMotor.getDeviceID(), MotorAlignmentValue.Opposed));
     }
 
@@ -142,23 +187,40 @@ public class ShooterSubsystem extends SubsystemBase {
 
     @Override
     public void periodic() {
-        // ── 即時 PID 調參：偵測 Glass 上的數值變更，自動套用到馬達 ──
+        // ── 即時 PID 調參：偵測 Shuffleboard 上的數值變更，自動套用到馬達 ──
         if (tunableKV.hasChanged() || tunableKP.hasChanged() 
-            || tunableKI.hasChanged() || tunableKD.hasChanged()) {
+            || tunableKI.hasChanged() || tunableKD.hasChanged()
+            || tunableKS.hasChanged()) {
             var newSlot0 = new Slot0Configs();
             newSlot0.kV = tunableKV.get();
             newSlot0.kP = tunableKP.get();
             newSlot0.kI = tunableKI.get();
             newSlot0.kD = tunableKD.get();
+            newSlot0.kS = tunableKS.get();
             leaderMotor.getConfigurator().apply(newSlot0);
         }
 
-        // ── 遙測數據：在 Glass 上觀察實際表現 ──
-        SmartDashboard.putNumber("Shooter/Current RPS", leaderMotor.getVelocity().getValueAsDouble());
-        SmartDashboard.putNumber("Shooter/Target RPS", velocityRequest.Velocity);
-        SmartDashboard.putNumber("Shooter/Error RPS", 
-            velocityRequest.Velocity - leaderMotor.getVelocity().getValueAsDouble());
-        SmartDashboard.putNumber("Shooter/Output Voltage", leaderMotor.getMotorVoltage().getValueAsDouble());
-        SmartDashboard.putNumber("Shooter/Stator Current", leaderMotor.getStatorCurrent().getValueAsDouble());
+        // ── 遙測數據 ──
+        double currentRps = leaderMotor.getVelocity().getValueAsDouble();
+        double targetRps = velocityRequest.Velocity;
+        double errorRps = targetRps - currentRps;
+        double outputV = leaderMotor.getMotorVoltage().getValueAsDouble();
+        double statorA = leaderMotor.getStatorCurrent().getValueAsDouble();
+
+        if (currentRpsEntry != null) {
+            // Shuffleboard 模式
+            currentRpsEntry.setDouble(currentRps);
+            targetRpsEntry.setDouble(targetRps);
+            errorRpsEntry.setDouble(errorRps);
+            outputVoltageEntry.setDouble(outputV);
+            statorCurrentEntry.setDouble(statorA);
+        } else {
+            // SmartDashboard 後備
+            SmartDashboard.putNumber("Shooter/Current RPS", currentRps);
+            SmartDashboard.putNumber("Shooter/Target RPS", targetRps);
+            SmartDashboard.putNumber("Shooter/Error RPS", errorRps);
+            SmartDashboard.putNumber("Shooter/Output Voltage", outputV);
+            SmartDashboard.putNumber("Shooter/Stator Current", statorA);
+        }
     }
 }

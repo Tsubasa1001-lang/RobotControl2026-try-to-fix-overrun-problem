@@ -9,6 +9,9 @@ import com.ctre.phoenix6.signals.NeutralModeValue;
 import com.ctre.phoenix6.signals.MotorAlignmentValue;
 import com.ctre.phoenix6.controls.Follower;
 
+import edu.wpi.first.networktables.GenericEntry;
+import edu.wpi.first.wpilibj.shuffleboard.BuiltInWidgets;
+import edu.wpi.first.wpilibj.shuffleboard.ShuffleboardTab;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
@@ -19,31 +22,63 @@ public class IntakeRollerSubsystem extends SubsystemBase {
     private final TalonFX leaderMotor;
     private final TalonFX followerMotor;
 
-    // 控制模式：VelocityVoltage (閉環轉速控制)
-    // 遇到阻力時 PID 會自動補償電壓來維持目標轉速
     private final VelocityVoltage velocityRequest = new VelocityVoltage(0);
 
-    // ==========================================
-    // Intake 設定
-    // ==========================================
-    // X44 馬達的無負載最大轉速約 6000 RPM = 100 RPS
-    // Intake 吸球不需要全速，設定一個合理的目標轉速
-    private static final double INTAKE_TARGET_RPS = 60.0;  // 吸球目標轉速 (RPS)
-    private static final double OUTTAKE_TARGET_RPS = -30.0; // 吐球目標轉速 (RPS)
+    private static final double INTAKE_TARGET_RPS = 60.0;
+    private static final double OUTTAKE_TARGET_RPS = -30.0;
 
-    // 電流限制 (保護馬達，但不限制電壓百分比)
     private static final double STATOR_CURRENT_LIMIT = 60.0;
     private static final double SUPPLY_CURRENT_LIMIT = 40.0;
 
-    // ── Glass 即時調參 ──
-    private final TunableNumber tunableKV = new TunableNumber("IntakeRoller/kV", 0.12);
-    private final TunableNumber tunableKP = new TunableNumber("IntakeRoller/kP", 0.2);
-    private final TunableNumber tunableKI = new TunableNumber("IntakeRoller/kI", 0.01);
-    private final TunableNumber tunableKD = new TunableNumber("IntakeRoller/kD", 0.0);
+    // ── Shuffleboard 即時調參 ──
+    private TunableNumber tunableKV;
+    private TunableNumber tunableKP;
+    private TunableNumber tunableKI;
+    private TunableNumber tunableKD;
+
+    // ── Shuffleboard 遙測 ──
+    private GenericEntry actualRpsEntry;
+    private GenericEntry targetRpsEntry;
+    private GenericEntry errorRpsEntry;
+    private GenericEntry leaderCurrentEntry;
+    private GenericEntry outputVoltageEntry;
 
     public IntakeRollerSubsystem() {
+        this(null);
+    }
+
+    public IntakeRollerSubsystem(ShuffleboardTab tab) {
         leaderMotor = new TalonFX(29);
         followerMotor = new TalonFX(35);
+
+        // ── 初始化可調參數 ──
+        if (tab != null) {
+            tunableKV = new TunableNumber(tab, "kV", 0.12);
+            tunableKP = new TunableNumber(tab, "kP", 0.2);
+            tunableKI = new TunableNumber(tab, "kI", 0.01);
+            tunableKD = new TunableNumber(tab, "kD", 0.0);
+
+            actualRpsEntry = tab.add("Actual RPS", 0)
+                .withWidget(BuiltInWidgets.kGraph)
+                .withSize(3, 2).withPosition(0, 2).getEntry();
+            targetRpsEntry = tab.add("Target RPS", 0)
+                .withWidget(BuiltInWidgets.kTextView)
+                .withSize(1, 1).withPosition(3, 2).getEntry();
+            errorRpsEntry = tab.add("Error RPS", 0)
+                .withWidget(BuiltInWidgets.kTextView)
+                .withSize(1, 1).withPosition(4, 2).getEntry();
+            outputVoltageEntry = tab.add("Output V", 0)
+                .withWidget(BuiltInWidgets.kGraph)
+                .withSize(3, 2).withPosition(5, 2).getEntry();
+            leaderCurrentEntry = tab.add("Leader A", 0)
+                .withWidget(BuiltInWidgets.kTextView)
+                .withSize(1, 1).withPosition(3, 3).getEntry();
+        } else {
+            tunableKV = new TunableNumber("IntakeRoller/kV", 0.12);
+            tunableKP = new TunableNumber("IntakeRoller/kP", 0.2);
+            tunableKI = new TunableNumber("IntakeRoller/kI", 0.01);
+            tunableKD = new TunableNumber("IntakeRoller/kD", 0.0);
+        }
 
         TalonFXConfiguration config = new TalonFXConfiguration();
 
@@ -139,7 +174,7 @@ public class IntakeRollerSubsystem extends SubsystemBase {
 
     @Override
     public void periodic() {
-        // ── 即時 PID 調參：偵測 Glass 上的數值變更，自動套用到馬達 ──
+        // ── 即時 PID 調參 ──
         if (tunableKV.hasChanged() || tunableKP.hasChanged() 
             || tunableKI.hasChanged() || tunableKD.hasChanged()) {
             var newSlot0 = new Slot0Configs();
@@ -152,11 +187,24 @@ public class IntakeRollerSubsystem extends SubsystemBase {
         }
 
         // ── 遙測數據 ──
-        SmartDashboard.putNumber("IntakeRoller/Actual RPS", getCurrentRps());
-        SmartDashboard.putNumber("IntakeRoller/Target RPS", velocityRequest.Velocity);
-        SmartDashboard.putNumber("IntakeRoller/Error RPS", 
-            velocityRequest.Velocity - getCurrentRps());
-        SmartDashboard.putNumber("IntakeRoller/Leader Current", leaderMotor.getStatorCurrent().getValueAsDouble());
-        SmartDashboard.putNumber("IntakeRoller/Output Voltage", leaderMotor.getMotorVoltage().getValueAsDouble());
+        double actualRps = getCurrentRps();
+        double targetRps = velocityRequest.Velocity;
+        double errorRps = targetRps - actualRps;
+        double outputV = leaderMotor.getMotorVoltage().getValueAsDouble();
+        double leaderA = leaderMotor.getStatorCurrent().getValueAsDouble();
+
+        if (actualRpsEntry != null) {
+            actualRpsEntry.setDouble(actualRps);
+            targetRpsEntry.setDouble(targetRps);
+            errorRpsEntry.setDouble(errorRps);
+            outputVoltageEntry.setDouble(outputV);
+            leaderCurrentEntry.setDouble(leaderA);
+        } else {
+            SmartDashboard.putNumber("IntakeRoller/Actual RPS", actualRps);
+            SmartDashboard.putNumber("IntakeRoller/Target RPS", targetRps);
+            SmartDashboard.putNumber("IntakeRoller/Error RPS", errorRps);
+            SmartDashboard.putNumber("IntakeRoller/Leader Current", leaderA);
+            SmartDashboard.putNumber("IntakeRoller/Output Voltage", outputV);
+        }
     }
 }

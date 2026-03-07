@@ -10,12 +10,14 @@ import com.ctre.phoenix6.signals.GravityTypeValue;
 import com.ctre.phoenix6.signals.InvertedValue;
 import com.ctre.phoenix6.signals.NeutralModeValue;
 
+import edu.wpi.first.networktables.GenericEntry;
+import edu.wpi.first.wpilibj.shuffleboard.BuiltInWidgets;
+import edu.wpi.first.wpilibj.shuffleboard.ShuffleboardTab;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
 import com.ctre.phoenix6.signals.MotorAlignmentValue;
 import frc.robot.util.TunableNumber;
-
 
 import java.util.function.DoubleSupplier;
 
@@ -23,24 +25,56 @@ public class IntakeArmSubsystem extends SubsystemBase {
     private final TalonFX leaderMotor;
     private final TalonFX followerMotor;
 
-    // 齒輪箱減速比 (20:1)
     private final double GEAR_RATIO = 20.0;
 
-    // 控制請求物件
-    // 1. PositionVoltage: 用來做自動控制 (PID)
     private final PositionVoltage positionRequest = new PositionVoltage(0).withSlot(0);
-    // 2. DutyCycleOut: 用來做手動搖桿控制 (百分比電壓)
     private final DutyCycleOut manualRequest = new DutyCycleOut(0);
 
-    // ── Glass 即時調參 ──
-    private final TunableNumber tunableKP = new TunableNumber("IntakeArm/kP", 2.0);
-    private final TunableNumber tunableKI = new TunableNumber("IntakeArm/kI", 0.0);
-    private final TunableNumber tunableKD = new TunableNumber("IntakeArm/kD", 0.1);
-    private final TunableNumber tunableKG = new TunableNumber("IntakeArm/kG", 0.1);
+    // ── Shuffleboard 即時調參 ──
+    private TunableNumber tunableKP;
+    private TunableNumber tunableKI;
+    private TunableNumber tunableKD;
+    private TunableNumber tunableKG;
+
+    // ── Shuffleboard 遙測 ──
+    private GenericEntry armRotationsEntry;
+    private GenericEntry motorRotationsEntry;
+    private GenericEntry outputVoltageEntry;
+    private GenericEntry statorCurrentEntry;
 
     public IntakeArmSubsystem() {
-        leaderMotor = new TalonFX(3); // 請確認你的 ID
+        this(null);
+    }
+
+    public IntakeArmSubsystem(ShuffleboardTab tab) {
+        leaderMotor = new TalonFX(3);
         followerMotor = new TalonFX(4);
+
+        // ── 初始化可調參數 ──
+        if (tab != null) {
+            tunableKP = new TunableNumber(tab, "kP", 2.0);
+            tunableKI = new TunableNumber(tab, "kI", 0.0);
+            tunableKD = new TunableNumber(tab, "kD", 0.1);
+            tunableKG = new TunableNumber(tab, "kG", 0.1);
+
+            armRotationsEntry = tab.add("Arm Rotations", 0)
+                .withWidget(BuiltInWidgets.kGraph)
+                .withSize(3, 2).withPosition(0, 2).getEntry();
+            motorRotationsEntry = tab.add("Motor Rotations", 0)
+                .withWidget(BuiltInWidgets.kTextView)
+                .withSize(1, 1).withPosition(3, 2).getEntry();
+            outputVoltageEntry = tab.add("Output V", 0)
+                .withWidget(BuiltInWidgets.kGraph)
+                .withSize(3, 2).withPosition(4, 2).getEntry();
+            statorCurrentEntry = tab.add("Stator A", 0)
+                .withWidget(BuiltInWidgets.kTextView)
+                .withSize(1, 1).withPosition(3, 3).getEntry();
+        } else {
+            tunableKP = new TunableNumber("IntakeArm/kP", 2.0);
+            tunableKI = new TunableNumber("IntakeArm/kI", 0.0);
+            tunableKD = new TunableNumber("IntakeArm/kD", 0.1);
+            tunableKG = new TunableNumber("IntakeArm/kG", 0.1);
+        }
 
         TalonFXConfiguration config = new TalonFXConfiguration();
 
@@ -115,7 +149,7 @@ public class IntakeArmSubsystem extends SubsystemBase {
 
     @Override
     public void periodic() {
-        // ── 即時 PID 調參：偵測 Glass 上的數值變更，自動套用到馬達 ──
+        // ── 即時 PID 調參 ──
         if (tunableKP.hasChanged() || tunableKI.hasChanged() 
             || tunableKD.hasChanged() || tunableKG.hasChanged()) {
             var newSlot0 = new Slot0Configs();
@@ -131,10 +165,19 @@ public class IntakeArmSubsystem extends SubsystemBase {
         // ── 遙測數據 ──
         double motorRotations = leaderMotor.getPosition().getValueAsDouble();
         double armRotations = motorRotations / GEAR_RATIO;
+        double outputV = leaderMotor.getMotorVoltage().getValueAsDouble();
+        double statorA = leaderMotor.getStatorCurrent().getValueAsDouble();
 
-        SmartDashboard.putNumber("IntakeArm/Arm Rotations", armRotations);
-        SmartDashboard.putNumber("IntakeArm/Motor Rotations", motorRotations);
-        SmartDashboard.putNumber("IntakeArm/Output Voltage", leaderMotor.getMotorVoltage().getValueAsDouble());
-        SmartDashboard.putNumber("IntakeArm/Stator Current", leaderMotor.getStatorCurrent().getValueAsDouble());
+        if (armRotationsEntry != null) {
+            armRotationsEntry.setDouble(armRotations);
+            motorRotationsEntry.setDouble(motorRotations);
+            outputVoltageEntry.setDouble(outputV);
+            statorCurrentEntry.setDouble(statorA);
+        } else {
+            SmartDashboard.putNumber("IntakeArm/Arm Rotations", armRotations);
+            SmartDashboard.putNumber("IntakeArm/Motor Rotations", motorRotations);
+            SmartDashboard.putNumber("IntakeArm/Output Voltage", outputV);
+            SmartDashboard.putNumber("IntakeArm/Stator Current", statorA);
+        }
     }
 }

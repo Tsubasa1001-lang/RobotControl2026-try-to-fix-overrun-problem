@@ -14,10 +14,13 @@ import edu.wpi.first.math.kinematics.SwerveModulePosition;
 import edu.wpi.first.math.kinematics.SwerveModuleState;
 import edu.wpi.first.math.filter.SlewRateLimiter;
 import edu.wpi.first.math.util.Units;
+import edu.wpi.first.networktables.GenericEntry;
 import edu.wpi.first.util.sendable.SendableBuilder;
 import edu.wpi.first.wpilibj.DriverStation;
 import edu.wpi.first.wpilibj.DriverStation.Alliance;
 import edu.wpi.first.wpilibj.RobotBase;
+import edu.wpi.first.wpilibj.shuffleboard.BuiltInWidgets;
+import edu.wpi.first.wpilibj.shuffleboard.ShuffleboardTab;
 import edu.wpi.first.wpilibj.smartdashboard.Field2d;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj2.command.Command;
@@ -58,16 +61,19 @@ public class Swerve extends SubsystemBase {
 
     private final Field2d m_field = new Field2d();
 
+    // ═══════════════ Shuffleboard (Swerve Tab) ═══════════════
+    private ShuffleboardTab swerveTab;
+    private GenericEntry chassisVxEntry, chassisVyEntry, chassisOmegaEntry;
+    private GenericEntry gyroAngleEntry;
+    private GenericEntry mod0SpeedEntry, mod0AngleEntry;
+
     public Swerve() {
         initFields();
-        // Instantiate odometry - used for tracking position
-        // 實例化（instantiate）測程法（odometry） - 用於追踪位置
         mOdometry = new SwerveDriveOdometry(
             SwerveConstants.kSwerveKinematics, 
             getGyroAngle(), 
             getModulePositions()
         );
-        SmartDashboard.putData("Field", m_field);
     }
 
     public Swerve(String limelightName) {
@@ -81,8 +87,33 @@ public class Swerve extends SubsystemBase {
                 new Pose2d(),
                 VecBuilder.fill(0.05, 0.05, Units.degreesToRadians(5)),
                 VecBuilder.fill(0.5, 0.5, Units.degreesToRadians(30)));
+    }
 
-        SmartDashboard.putData("Field", m_field);
+    /**
+     * 設定 Shuffleboard Swerve 分頁（由 RobotContainer 在建構後呼叫）。
+     */
+    public void setupShuffleboardTab(ShuffleboardTab tab) {
+        this.swerveTab = tab;
+
+        chassisVxEntry = tab.add("Chassis vx", 0)
+                .withWidget(BuiltInWidgets.kGraph).withSize(3, 2).withPosition(0, 0).getEntry();
+        chassisVyEntry = tab.add("Chassis vy", 0)
+                .withWidget(BuiltInWidgets.kGraph).withSize(3, 2).withPosition(3, 0).getEntry();
+        chassisOmegaEntry = tab.add("Chassis omega", 0)
+                .withWidget(BuiltInWidgets.kGraph).withSize(3, 2).withPosition(6, 0).getEntry();
+        gyroAngleEntry = tab.add("Gyro Angle", 0)
+                .withWidget(BuiltInWidgets.kTextView).withSize(2, 1).withPosition(0, 2).getEntry();
+        mod0SpeedEntry = tab.add("Mod0 Speed", 0)
+                .withWidget(BuiltInWidgets.kTextView).withSize(2, 1).withPosition(2, 2).getEntry();
+        mod0AngleEntry = tab.add("Mod0 Angle", 0)
+                .withWidget(BuiltInWidgets.kTextView).withSize(2, 1).withPosition(4, 2).getEntry();
+    }
+
+    /**
+     * 取得 Field2d 物件（供 ShuffleboardManager.setupMainTab 使用）。
+     */
+    public Field2d getField2d() {
+        return m_field;
     }
 
     private void initFields() {
@@ -181,6 +212,11 @@ public class Swerve extends SubsystemBase {
         // 更新 Field2d
         m_field.setRobotPose(getPose());
 
+        // 更新 Swerve Tab 陀螺儀角度
+        if (gyroAngleEntry != null) {
+            gyroAngleEntry.setDouble(gyroAngle.getDegrees());
+        }
+
         // 每個週期都執行馬達控制（原本靠獨立的 setStateCommand 排程，容易漏掉）
         if (edu.wpi.first.wpilibj.DriverStation.isEnabled()) {
             runSetStates();
@@ -208,9 +244,16 @@ public class Swerve extends SubsystemBase {
         double zSpeed = zSpeedLimiter.calculate(sumChassisSpeeds.omegaRadiansPerSecond);
 
         var chassisSpeeds = new ChassisSpeeds(xSpeed, ySpeed, zSpeed);
-        SmartDashboard.putNumber("Chassis/vx", chassisSpeeds.vxMetersPerSecond);
-        SmartDashboard.putNumber("Chassis/vy", chassisSpeeds.vyMetersPerSecond);
-        SmartDashboard.putNumber("Chassis/omega", chassisSpeeds.omegaRadiansPerSecond);
+
+        if (chassisVxEntry != null) {
+            chassisVxEntry.setDouble(chassisSpeeds.vxMetersPerSecond);
+            chassisVyEntry.setDouble(chassisSpeeds.vyMetersPerSecond);
+            chassisOmegaEntry.setDouble(chassisSpeeds.omegaRadiansPerSecond);
+        } else {
+            SmartDashboard.putNumber("Chassis/vx", chassisSpeeds.vxMetersPerSecond);
+            SmartDashboard.putNumber("Chassis/vy", chassisSpeeds.vyMetersPerSecond);
+            SmartDashboard.putNumber("Chassis/omega", chassisSpeeds.omegaRadiansPerSecond);
+        }
 
         SwerveModuleState[] mStates;
         if (mSwerveMode == SwerveMode.ROBOT_CENTRIC) 
@@ -353,8 +396,15 @@ public class Swerve extends SubsystemBase {
      */
     public void setModuleStates(SwerveModuleState[] desiredStates) {
         SwerveDriveKinematics.desaturateWheelSpeeds(desiredStates, getMaxVelocity());
-        SmartDashboard.putNumber("Module0/speed", desiredStates[0].speedMetersPerSecond);
-        SmartDashboard.putNumber("Module0/angle", desiredStates[0].angle.getDegrees());
+
+        if (mod0SpeedEntry != null) {
+            mod0SpeedEntry.setDouble(desiredStates[0].speedMetersPerSecond);
+            mod0AngleEntry.setDouble(desiredStates[0].angle.getDegrees());
+        } else {
+            SmartDashboard.putNumber("Module0/speed", desiredStates[0].speedMetersPerSecond);
+            SmartDashboard.putNumber("Module0/angle", desiredStates[0].angle.getDegrees());
+        }
+
         mLeftFrontModule.setState(desiredStates[0]);
         mRightFrontModule.setState(desiredStates[1]);
         mLeftRearModule.setState(desiredStates[2]);
