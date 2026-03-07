@@ -6,6 +6,7 @@ package frc.robot;
 
 import com.ctre.phoenix6.CANBus;
 
+import edu.wpi.first.math.MathUtil;
 import edu.wpi.first.math.geometry.Translation2d;
 import edu.wpi.first.math.kinematics.SwerveDriveKinematics;
 import edu.wpi.first.math.trajectory.TrapezoidProfile;
@@ -40,24 +41,53 @@ public final class Constants {
     public static final double kFieldWidthMeters = 8.069;   // 場地總寬度 (m)
     public static final double kFieldMidX = kFieldLengthMeters / 2.0; // 中場線 X ≈ 8.27m
 
-    // ── Hub 目標座標（己方場域內瞄準得分） ──
+    // ── Hub 目標座標（藍方原點座標系，單一來源） ──
     // 2026 REBUILT: Hub 在場地中央區域，不在牆壁邊！
     // 座標由官方 AprilTag JSON (2026-rebuilt-welded.json) 計算 Hub 中心位置
-    // 紅方 Hub: AprilTag 2-5, 8-11 中心
     // 藍方 Hub: AprilTag 18-21, 24-27 中心
-    // ⚠️ 這些值是從 AprilTag 座標估算的 Hub 中心，請根據實際場地微調！
-    public static final double kBlueHubX = 4.626;   // 藍方 Hub X 座標 (m)（場地左半部）
-    public static final double kBlueHubY = 4.035;   // 藍方 Hub Y 座標 (m)（場地中央偏下）
-    public static final double kRedHubX = 11.915;   // 紅方 Hub X 座標 (m)（場地右半部）
-    public static final double kRedHubY = 4.035;    // 紅方 Hub Y 座標 (m)（場地中央偏下）
+    // 紅方 Hub 由 kFieldLengthMeters - kHubX 自動推導（對稱場地）
+    // ⚠️ 這些值是從 AprilTag 座標估算的 Hub 中心，只需維護藍方座標，紅方自動鏡像！
+    public static final double kHubX = 4.626;   // 藍方 Hub X 座標 (m)（場地左半部）
+    public static final double kHubY = 4.035;   // Hub Y 座標 (m)（場地中央，紅藍相同）
 
-    // ── 中立區回傳：朝固定角度射回己方聯盟區 ──
-    // 在中立區時，不需要瞄準特定座標點，只需讓機器人面向己方聯盟區方向即可
-    // 角度使用場地座標系（wpiBlue），0° = 場地正右(+X)，90° = 場地正上(+Y)，180°/-180° = 場地正左(-X)
-    // 紅方聯盟區在場地右邊(+X) → 朝 0° 射
+    // ── 中立區回傳角度（藍方基準） ──
     // 藍方聯盟區在場地左邊(-X) → 朝 180° 射
-    public static final double kRedReturnAngleRad = 0.0;          // 紅方：朝場地正右 (0°)
-    public static final double kBlueReturnAngleRad = Math.PI;     // 藍方：朝場地正左 (180°)
+    // 紅方由 flipAngle() 自動計算（π → 0）
+    public static final double kReturnAngleRad = Math.PI; // 藍方基準：朝場地正左 (180°)
+
+    /**
+     * 取得己方 Hub 的場地座標（自動處理紅藍鏡像）
+     * WPILib 座標系始終以藍方為原點，紅方 Hub = (fieldLength - blueHubX, blueHubY)
+     * @param isRed 是否為紅方聯盟
+     * @return Hub 中心的 Translation2d
+     */
+    public static Translation2d getHubPosition(boolean isRed) {
+      return isRed
+          ? new Translation2d(kFieldLengthMeters - kHubX, kHubY)
+          : new Translation2d(kHubX, kHubY);
+    }
+
+    /**
+     * 取得中立區回傳角度（自動處理紅藍鏡像）
+     * 藍方朝 π（場地正左），紅方朝 0（場地正右）
+     * @param isRed 是否為紅方聯盟
+     * @return 回傳方向角度 (rad)
+     */
+    public static double getReturnAngleRad(boolean isRed) {
+      // 紅方：將藍方角度水平翻轉 → π - θ（mod 2π 後 π - π = 0）
+      return isRed ? MathUtil.angleModulus(Math.PI - kReturnAngleRad) : kReturnAngleRad;
+    }
+
+    /**
+     * 判斷機器人是否在己方場域
+     * 藍方己方在 X < kFieldMidX，紅方己方在 X > kFieldMidX
+     * @param robotX 機器人當前 X 座標 (m)
+     * @param isRed 是否為紅方聯盟
+     * @return true = 在己方場域
+     */
+    public static boolean isInOwnZone(double robotX, boolean isRed) {
+      return isRed ? (robotX > kFieldMidX) : (robotX < kFieldMidX);
+    }
 
     // 旋轉 PID（控制底盤面向目標）
     public static final double kRotation_kP = 5.0;

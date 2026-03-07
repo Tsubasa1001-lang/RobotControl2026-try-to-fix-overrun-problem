@@ -136,42 +136,21 @@ public class AutoAimAndShoot extends Command {
         // 目標角度（場地座標系）
         double targetAngleRad;
 
-        if (isRed) {
-            // 紅方：己方場域在 X > kFieldMidX（場地右半邊）
-            m_isInOwnZone = robotX > AutoAimConstants.kFieldMidX;
-            if (m_isInOwnZone) {
-                // 己方區域：瞄準紅方 Hub
-                m_targetPosition = new Translation2d(
-                    AutoAimConstants.kRedHubX,
-                    AutoAimConstants.kRedHubY);
-                Translation2d toTarget = m_targetPosition.minus(robotPosition);
-                // atan2 計算「機器人→Hub」的場地角度，再加上射手安裝偏移
-                // 如果射手在背面（offset=π），機器人需要背對 Hub 才能射中
-                targetAngleRad = Math.atan2(toTarget.getY(), toTarget.getX()) 
-                    + AutoAimConstants.kShooterAngleOffsetRad;
-            } else {
-                // 中立區：朝固定角度射回紅方聯盟區（場地正右方，0°）
-                m_targetPosition = null; // 不需要目標點
-                targetAngleRad = AutoAimConstants.kRedReturnAngleRad 
-                    + AutoAimConstants.kShooterAngleOffsetRad;
-            }
+        // 統一邏輯：使用 Constants helper 自動處理紅藍鏡像
+        m_isInOwnZone = AutoAimConstants.isInOwnZone(robotX, isRed);
+        if (m_isInOwnZone) {
+            // 己方區域：瞄準己方 Hub
+            m_targetPosition = AutoAimConstants.getHubPosition(isRed);
+            Translation2d toTarget = m_targetPosition.minus(robotPosition);
+            // atan2 計算「機器人→Hub」的場地角度，再加上射手安裝偏移
+            // 如果射手在背面（offset=π），機器人需要背對 Hub 才能射中
+            targetAngleRad = Math.atan2(toTarget.getY(), toTarget.getX()) 
+                + AutoAimConstants.kShooterAngleOffsetRad;
         } else {
-            // 藍方：己方場域在 X < kFieldMidX（場地左半邊）
-            m_isInOwnZone = robotX < AutoAimConstants.kFieldMidX;
-            if (m_isInOwnZone) {
-                // 己方區域：瞄準藍方 Hub
-                m_targetPosition = new Translation2d(
-                    AutoAimConstants.kBlueHubX,
-                    AutoAimConstants.kBlueHubY);
-                Translation2d toTarget = m_targetPosition.minus(robotPosition);
-                targetAngleRad = Math.atan2(toTarget.getY(), toTarget.getX()) 
-                    + AutoAimConstants.kShooterAngleOffsetRad;
-            } else {
-                // 中立區：朝固定角度射回藍方聯盟區（場地正左方，180°）
-                m_targetPosition = null; // 不需要目標點
-                targetAngleRad = AutoAimConstants.kBlueReturnAngleRad 
-                    + AutoAimConstants.kShooterAngleOffsetRad;
-            }
+            // 中立區：朝固定角度射回己方聯盟區
+            m_targetPosition = null; // 不需要目標點
+            targetAngleRad = AutoAimConstants.getReturnAngleRad(isRed) 
+                + AutoAimConstants.kShooterAngleOffsetRad;
         }
 
         // 3. 計算到目標的距離（己方區域用實際距離，中立區用估算）
@@ -180,10 +159,7 @@ public class AutoAimAndShoot extends Command {
             distanceToTarget = m_targetPosition.minus(robotPosition).getNorm();
         } else {
             // 中立區沒有特定目標點，用到 Hub 的距離估算（僅用於 debug 顯示）
-            Translation2d hubPos = isRed
-                ? new Translation2d(AutoAimConstants.kRedHubX, AutoAimConstants.kRedHubY)
-                : new Translation2d(AutoAimConstants.kBlueHubX, AutoAimConstants.kBlueHubY);
-            distanceToTarget = hubPos.minus(robotPosition).getNorm();
+            distanceToTarget = AutoAimConstants.getHubPosition(isRed).minus(robotPosition).getNorm();
         }
 
         // 4. 目前機器人朝向

@@ -75,12 +75,7 @@ public class RobotContainer {
     // 根據機器人目前位置計算到 Hub 的距離，查表取得目標 RPS
     private double getAdaptiveRps() {
         var robotPos = swerve.getPose().getTranslation();
-        Translation2d hubPos;
-        if (swerve.isAllianceRed()) {
-            hubPos = new Translation2d(AutoAimConstants.kRedHubX, AutoAimConstants.kRedHubY);
-        } else {
-            hubPos = new Translation2d(AutoAimConstants.kBlueHubX, AutoAimConstants.kBlueHubY);
-        }
+        Translation2d hubPos = AutoAimConstants.getHubPosition(swerve.isAllianceRed());
         double distance = hubPos.minus(robotPos).getNorm();
         return ShooterSubsystem.interpolateRps(distance);
     }
