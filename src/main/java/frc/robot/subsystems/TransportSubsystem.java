@@ -15,8 +15,9 @@ public class TransportSubsystem extends SubsystemBase {
     private final TalonFX up_to_shoot;
     private final TalonFX transport;
 
-    // 建立 VelocityVoltage 閉環控制請求物件
-    private final VelocityVoltage velocityRequest = new VelocityVoltage(0);
+    // 建立獨立的 VelocityVoltage 閉環控制請求物件，避免兩個馬達共用同一個參照導致互相覆蓋
+    private final VelocityVoltage upToShootRequest = new VelocityVoltage(0);
+    private final VelocityVoltage transportRequest = new VelocityVoltage(0);
 
     public TransportSubsystem() {
         up_to_shoot = new TalonFX(TransportConstants.kUpToShootMotorID); 
@@ -61,22 +62,22 @@ public class TransportSubsystem extends SubsystemBase {
      * @param shootRps     up_to_shoot 上膛推球目標轉速
      */
     public void setSpeed(double transportRps, double shootRps) {
-        up_to_shoot.setControl(velocityRequest.withVelocity(shootRps));
-        transport.setControl(velocityRequest.withVelocity(transportRps));
+        up_to_shoot.setControl(upToShootRequest.withVelocity(shootRps));
+        transport.setControl(transportRequest.withVelocity(transportRps));
     }
 
     /**
      * 只啟動 transport 輸送帶 (閉環目標轉速)
      */
     public void setSpeed_transport() {
-        transport.setControl(velocityRequest.withVelocity(TransportConstants.kTransportRps));
+        transport.setControl(transportRequest.withVelocity(TransportConstants.kTransportRps));
     }
 
     /**
      * 只啟動 up_to_shoot 上膛推球 (閉環目標轉速)
      */
     public void setSpeed_to_shoot() {
-        up_to_shoot.setControl(velocityRequest.withVelocity(TransportConstants.kUpToShootRps));
+        up_to_shoot.setControl(upToShootRequest.withVelocity(TransportConstants.kUpToShootRps));
     }
 
     /**

@@ -182,7 +182,7 @@ public class IntakeArmSubsystem extends SubsystemBase {
             newSlot0.kG = tunableKG.get();
             newSlot0.GravityType = GravityTypeValue.Arm_Cosine;
             leaderMotor.getConfigurator().apply(newSlot0);
-            followerMotor.getConfigurator().apply(newSlot0);
+            // Follower 馬達會自動套用 Leader 的輸出電壓與邏輯，不需套用 PID 參數
         }
 
         // ── 遙測數據（節流）──
