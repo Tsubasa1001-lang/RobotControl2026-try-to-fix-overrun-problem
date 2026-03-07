@@ -236,8 +236,9 @@ File → Preferences → Server →
 | 距離-RPS 對照表 | `Constants.java` → `AutoAimConstants.kDistanceToRpsTable` |
 | 射擊模式速度倍率 | `Constants.java` → `AutoAimConstants.kShootingModeSpeedMultiplier` |
 | 射手容許誤差 | `Constants.java` → `AutoAimConstants.kShooterToleranceRps` |
-| 角度容許誤差 | `Constants.java` → `AutoAimConstants.kRotationToleranceDeg` |
-| Speaker 座標 | `Constants.java` → `AutoAimConstants.kBlueSpeakerX/Y`, `kRedSpeakerX/Y` |
+| 角度容許誤差（首次觸發） | `Constants.java` → `AutoAimConstants.kRotationToleranceDeg` |
+| 遲滯角度（連射保持） | `Constants.java` → `AutoAimConstants.kFeedingHysteresisDeg` |
+| Hub 座標 (2026 REBUILT) | `Constants.java` → `AutoAimConstants.kBlueHubX/Y`, `kRedHubX/Y` |
 
 ---
 
@@ -260,10 +261,12 @@ File → Preferences → Server →
 │  │  ┌──────────────────────┐                       │          │
 │  │  │  AutoAimAndShoot     │  setAimSpeed(旋轉PID) │          │
 │  │  │                      │───────────────────────┘          │
-│  │  │  ① 計算面向目標角度   │                                  │
-│  │  │  ② PID 控制底盤旋轉   │                                  │
-│  │  │  ③ 依距離調整射手速度  │                                  │
-│  │  │  ④ 達速+對準→自動送球  │                                  │
+│  │  │  ① 判斷區域(己方/中場) │                                  │
+│  │  │  ② 選擇目標(Hub/     │                                  │
+│  │  │     回傳點)           │                                  │
+│  │  │  ③ PID 控制底盤旋轉   │                                  │
+│  │  │  ④ 依區域調整射手速度  │                                  │
+│  │  │  ⑤ 達速+對準→自動送球  │                                  │
 │  │  └──────┬──────┬────────┘                                  │
 │  │         │      │                                           │
 │  │         ▼      ▼                                           │
@@ -286,9 +289,10 @@ File → Preferences → Server →
 
 | 行為 | 正常模式 | 射擊模式 |
 |------|---------|---------|
-| 左搖桿平移 | 100%（不按 Boost）/ 50% | **×0.3** (30%) 微調位置 |
-| 右搖桿旋轉 | 正常操控 | **鎖定為 0**（由 AutoAim PID 控制） |
+| 左搖桿平移 | 100%（不按 Boost）/ 50% | **×0.3** (30%)，避免移動慣性讓球射偏 |
+| 右搖桿旋轉 | 正常操控 | **鎖定為 0**（由 AutoAim PID 全速控制） |
 | Boost (Right Bumper) | 2x 加速 | 仍可使用（但效果 ×0.3） |
+| 底盤旋轉速度 | 手動控制 | **不限速**，PID 輸出直接驅動底盤旋轉 |
 
 > 放開 Left Bumper 後自動恢復正常操控。
 
@@ -297,16 +301,88 @@ File → Preferences → Server →
 每個 20ms 週期執行以下步驟：
 
 ```
-1. 取得機器人目前位置 (Swerve.getPose())
-2. 計算「機器人 → Speaker」的向量
-3. 用 atan2 計算目標角度 (場地座標系)
-4. PID 計算旋轉速度 → setAimSpeed() 疊加到底盤
-5. 根據距離查表（線性內插） → 取得目標 RPS
-6. 設定 Shooter 目標速度
-7. 判斷：角度對齊? AND 射手達速?
-   ✅ → 自動啟動 Transport 送球
-   ❌ → 停止送球，等待條件達成
+ 1. 取得機器人目前位置 (Swerve.getPose())
+ 2. 判斷區域：
+    ├── 己方聯盟區 → 計算面向 Hub 的角度 (atan2)
+    └── 中立區（中場）→ 使用固定角度朝向己方聯盟區
+ 3. 計算到 Hub 的距離（己方區域用實際距離）
+ 4. 取得目前角度 (Swerve.getHeading())
+ 5. PID 計算旋轉速度（不限速）→ setAimSpeed() 疊加到底盤
+ 6. 根據區域選擇射手速度：
+    ├── 己方聯盟區 → 根據距離查表（線性內插）
+    └── 中立區     → 固定 kMidFieldReturnRps (70 RPS)
+ 7. 設定 Shooter 目標速度（按下按鈕就開始轉，不等對齊）
+ 8. 判斷角度對齊（遲滯邏輯）
+ 9. Transport 輸送帶持續運轉，預送球到待發位置
+10. 角度對齊? AND 射手達速?
+    ✅ → 啟動 up_to_shoot 推球進射手飛輪（開始發射）
+    ❌ → 停止 up_to_shoot（輸送帶繼續預送球）
 ```
+
+### 9.3.1 遲滯防抖 (Hysteresis)
+
+為避免機器人移動過程中些許角度偏差導致連射中斷，使用**雙閾值遲滯邏輯**：
+
+```
+                    ┌───── kFeedingHysteresisDeg (5°) ─────┐
+                    │                                       │
+  ──────────────────┤        送球中保持發射                   ├──────
+                    │                                       │
+          ┌── kRotationToleranceDeg (2°) ──┐                │
+          │                                │                │
+  ────────┤      初次觸發門檻               ├────────────────┤
+          │                                │                │
+          └────────────────────────────────┘                │
+                    └───────────────────────────────────────┘
+```
+
+| 狀態 | 觸發條件 | 說明 |
+|------|---------|------|
+| 尚未送球 → 開始送球 | 角度誤差 ≤ **2°** AND 射手達速 | 嚴格門檻，確保首發精準 |
+| 正在送球 → 繼續送球 | 角度誤差 ≤ **5°** AND 射手達速 | 寬鬆門檻，連射不中斷 |
+| 正在送球 → 停止送球 | 角度誤差 > **5°** OR 射手失速 | 偏差太大才暫停 |
+
+### 9.3.2 中場區域雙目標切換 (Mid-Field Zone Logic)
+
+機器人在**中立區（中場）**時，射擊行為與在己方聯盟區不同：
+
+```
+場地座標示意圖 (wpiBlue 座標系) — 2026 REBUILT
+X = 0m                    X ≈ 8.27m (中線)             X = 16.541m
+ ┌────────────────────────────┬────────────────────────────┐
+ │         藍方聯盟區          │         紅方聯盟區          │
+ │                            │                            │
+ │     🔵 藍方 Hub             │            🔴 紅方 Hub     │
+ │     (4.63, 4.04)           │            (11.92, 4.04)   │
+ │                            │                            │
+ │  ⬅ 藍方回傳方向 (180°)      │   ➡ 紅方回傳方向 (0°)      │
+ │                            │                            │
+ └────────────────────────────┴────────────────────────────┘
+  ※ Hub 在場地中央區域，不在牆壁邊！
+  ※ 中立區回傳使用固定角度，不瞄準特定座標點
+```
+
+**區域判斷邏輯**：
+
+| 聯盟顏色 | 己方聯盟區 | 中立區（中場） |
+|---------|-----------|--------------|
+| **藍方** | robotX < 8.27m | robotX ≥ 8.27m |
+| **紅方** | robotX ≥ 8.27m | robotX < 8.27m |
+
+**不同區域的行為差異**：
+
+| | 己方聯盟區 | 中立區（中場） |
+|---|---|---|
+| **瞄準方式** | atan2 計算面向 Hub 的角度 | 固定角度朝向己方聯盟區 |
+| **目的** | 射入 Hub 得分 (Fuel) | 將球回傳至己方區域 |
+| **射手速度** | 依距離線性內插 (35~70 RPS) | 固定 kMidFieldReturnRps (70 RPS) |
+| **旋轉 PID** | 相同 | 相同 |
+| **送球邏輯** | 相同（遲滯防抖） | 相同（遲滯防抖） |
+
+> 💡 **實際場景**：比賽中在中場拿到球時，按住 Left Bumper 不會瞄向 Hub（太遠射不進），
+> 而是面向己方聯盟區方向（固定角度），將球高速射回，讓隊友或自己回到近距離再射擊得分。
+>
+> ⚠️ 回傳角度 (`kBlue/RedReturnAngleRad`) 和回傳速度 (`kMidFieldReturnRps`) 需要根據場地實際測試調整！
 
 ### 9.4 所有可調參數一覽表
 
@@ -359,22 +435,48 @@ File → Preferences → Server →
 
 | 參數 | 預設值 | 調整位置 | 效果說明 |
 |------|-------|---------|---------|
-| **kRotationToleranceDeg** | `2.0°` | `Constants.java` → `AutoAimConstants` | 角度誤差在此範圍內視為「已對齊」。太小會一直不觸發射擊，太大會打歪 |
+| **kRotationToleranceDeg** | `2.0°` | `Constants.java` → `AutoAimConstants` | **首次觸發**送球的角度門檻。太小會一直不觸發射擊，太大會打歪 |
+| **kFeedingHysteresisDeg** | `5.0°` | `Constants.java` → `AutoAimConstants` | **連射中**保持送球的寬鬆角度門檻。防止移動中微小偏差中斷連射。太大可能打歪，太小連射容易中斷 |
 | **kShooterToleranceRps** | `3.0 RPS` | `Constants.java` → `AutoAimConstants` | 射手速度在目標 ± 此值內視為「達速」。太小會等很久才射，太大會射出不穩定的球 |
-| **kShootingModeSpeedMultiplier** | `0.3` | `Constants.java` → `AutoAimConstants` | 射擊模式下平移速度倍率。`0.3` = 30% 速度。越小越穩但操作者微調能力越弱 |
+| **kShootingModeSpeedMultiplier** | `0.3` | `Constants.java` → `AutoAimConstants` | 射擊模式下平移速度倍率。降低移動慣性防止球射偏。`0.3` = 30% 速度 |
 
-#### 🎯 Speaker 座標
+#### 🎯 Hub 座標 (2026 REBUILT — 從 AprilTag JSON 計算，Hub 在場地中央)
 
 | 參數 | 預設值 | 說明 |
 |------|-------|------|
-| **kBlueSpeakerX** | `0.0 m` | 藍方 Speaker X 座標（場地左側牆壁） |
-| **kBlueSpeakerY** | `5.55 m` | 藍方 Speaker Y 座標 |
-| **kRedSpeakerX** | `16.54 m` | 紅方 Speaker X 座標（場地右側牆壁） |
-| **kRedSpeakerY** | `5.55 m` | 紅方 Speaker Y 座標 |
+| **kBlueHubX** | `4.626 m` | 藍方 Hub X 座標（場地左半部中央） |
+| **kBlueHubY** | `4.035 m` | 藍方 Hub Y 座標（場地中央偏下） |
+| **kRedHubX** | `11.915 m` | 紅方 Hub X 座標（場地右半部中央） |
+| **kRedHubY** | `4.035 m` | 紅方 Hub Y 座標（場地中央偏下） |
 
 > ⚠️ **必須根據你的比賽場地量測這些值！**
 >
-> 📌 調整位置：`Constants.java` → `AutoAimConstants.kBlueSpeakerX/Y`, `kRedSpeakerX/Y`
+> 📌 調整位置：`Constants.java` → `AutoAimConstants.kBlueHubX/Y`, `kRedHubX/Y`
+
+#### 🔄 中場回傳角度（固定角度，不瞄準特定座標點）
+
+| 參數 | 預設值 | 說明 |
+|------|-------|------|
+| **kRedReturnAngleRad** | `0.0 rad (0°)` | 紅方中立區回傳：面向場地正右 (+X 方向) |
+| **kBlueReturnAngleRad** | `π rad (180°)` | 藍方中立區回傳：面向場地正左 (-X 方向) |
+
+> 📌 調整位置：`Constants.java` → `AutoAimConstants.kRed/BlueReturnAngleRad`
+
+#### 🗺️ 中場區域判斷
+
+| 參數 | 預設值 | 調整位置 | 說明 |
+|------|-------|---------|------|
+| **kFieldLengthMeters** | `16.541 m` | `Constants.java` → `AutoAimConstants` | 場地全長（官方 2026 REBUILT） |
+| **kFieldWidthMeters** | `8.069 m` | `Constants.java` → `AutoAimConstants` | 場地全寬 |
+| **kFieldMidX** | `≈8.27 m` | 自動計算 (`kFieldLengthMeters / 2`) | 場地中線 X 座標，用來判斷己方/中立區 |
+| **kMidFieldReturnRps** | `70.0 RPS` | `Constants.java` → `AutoAimConstants` | 中場回傳球時的射手固定速度。需實測調整 |
+
+> 💡 **中場回傳角度怎麼調**：
+> 1. 在中場發球，觀察球落點方向
+> 2. 如果球偏左/偏右 → 微調 `kBlue/RedReturnAngleRad` 的角度值
+> 3. 如果球飛不到位 → 提高 `kMidFieldReturnRps`
+> 4. 如果球飛太遠出界 → 降低 `kMidFieldReturnRps`
+> 4. Y 座標調整左右偏移
 
 #### 🚗 ManualDrive 相關
 
@@ -390,9 +492,13 @@ File → Preferences → Server →
 
 | 參數 | 預設值 | 調整位置 | 效果說明 |
 |------|-------|---------|---------|
-| **TRANSPORT_SPEED** | `0.4` | `TransportSubsystem.java` | 送球馬達速度 (0~1 百分比) |
-| **TO_SHOOT_SP** | `1.0` | `TransportSubsystem.java` | 上膛馬達速度 (推球到射手的馬達) |
+| **TRANSPORT_SPEED** | `0.4` | `TransportSubsystem.java` | 輸送帶速度 (0~1)。自動瞄準時持續運轉預送球 |
+| **TO_SHOOT_SP** | `1.0` | `TransportSubsystem.java` | up_to_shoot 馬達速度 (推球進射手飛輪)。自動瞄準時只有對齊+達速後才啟動 |
 | **SLOW_TRANSPORT_SPEED** | `0.2` | `TransportSubsystem.java` | 慢速吸球時的輸送帶速度 |
+
+> 💡 **自動瞄準時 Transport 拆分控制**：
+> - `transport`（輸送帶）一按下按鈕就開始跑 → 預送球到射手附近
+> - `up_to_shoot`（上膛推球）等對齊 + 達速後才啟動 → 把球推進飛輪發射
 
 #### 🚀 Swerve 加速度限制 (SlewRateLimiter)
 
@@ -407,11 +513,13 @@ File → Preferences → Server →
 | | 手動射擊 (Right Trigger) | 自動瞄準射擊 (Left Bumper) |
 |---|---|---|
 | **觸發方式** | 按住右板機 | 按住左肩鍵 |
-| **底盤行為** | 正常操控 | 射擊模式（旋轉鎖定 + 減速） |
-| **旋轉控制** | 手動右搖桿 | PID 自動面向目標 |
-| **射手速度** | 固定 50 RPS | 根據距離自動調整 (35~70 RPS) |
-| **送球時機** | 達速後自動送球 | 角度對齊 + 達速後自動送球 |
-| **適用場景** | 近距離、已手動對好角度 | 任意距離、自動對齊 |
+| **底盤行為** | 正常操控 | 旋轉鎖定（PID 接管），平移 ×0.3 防慣性射偏 |
+| **旋轉控制** | 手動右搖桿 | PID 自動面向目標（不限速） |
+| **瞄準目標** | 無自動瞄準 | 己方區 → Speaker；中場 → 己方回傳點 |
+| **射手速度** | 固定 50 RPS | 己方區 → 依距離自動調整 (35~70 RPS)；中場 → 固定 70 RPS |
+| **送球機制** | 達速後 transport + up_to_shoot 同時啟動 | transport 一直跑預送球；up_to_shoot 在對齊+達速後才啟動 |
+| **連射保護** | 無 | 遲滯邏輯：首次 2°，連射中放寬到 5° |
+| **適用場景** | 近距離、已手動對好角度 | 任意距離、自動對齊；中場回傳球 |
 
 ### 9.6 調參步驟建議
 
@@ -448,14 +556,17 @@ File → Preferences → Server →
 4. 寫入 Constants.java → kDistanceToRpsTable
 ```
 
-#### Step 4: 調容許誤差
+#### Step 4: 調容許誤差與遲滯
 
 ```
 1. 觀察 Shuffleboard AutoAim Tab 的 "Aligned?" 和 "At Speed?" 指示燈
-2. 如果一直不亮 → 放寬容許誤差
-3. 如果進球率低 → 收緊容許誤差
-4. 角度建議：1°~3° 之間
-5. 射手速度建議：2~5 RPS 之間
+2. 如果 "Aligned?" 一直不亮 → 放寬 kRotationToleranceDeg（例如 2° → 3°）
+3. 如果進球率低 → 收緊 kRotationToleranceDeg
+4. 如果移動中連射頻繁中斷 → 增加 kFeedingHysteresisDeg（例如 5° → 7°）
+5. 如果連射中打歪 → 減小 kFeedingHysteresisDeg（例如 5° → 3°）
+6. 角度首次觸發建議：1°~3° 之間
+7. 遲滯寬鬆門檻建議：3°~8° 之間
+8. 射手速度建議：2~5 RPS 之間
 ```
 
 ---
@@ -554,4 +665,4 @@ PID 調參：
 
 ---
 
-*最後更新：2026-03-07*
+*最後更新：2026-03-07（新增中場區域雙目標切換邏輯）*

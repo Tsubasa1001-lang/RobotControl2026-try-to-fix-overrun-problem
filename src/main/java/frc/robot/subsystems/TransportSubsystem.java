@@ -103,9 +103,34 @@ public class TransportSubsystem extends SubsystemBase {
 
     /**
      * 啟動 Transport 送球（供外部 Command 直接呼叫）
+     * 同時啟動 transport（輸送帶）和 up_to_shoot（上膛推球）
      */
     public void runTransport() {
         setSpeed(TRANSPORT_SPEED, TO_SHOOT_SP);
+    }
+
+    /**
+     * 只啟動 transport 輸送帶（預送球到待發射位置），不啟動 up_to_shoot
+     * 用於自動瞄準期間：還沒對齊前先把球送到射手附近待命
+     */
+    public void runTransportOnly() {
+        transport.setControl(outputRequest.withOutput(TRANSPORT_SPEED));
+    }
+
+    /**
+     * 只啟動 up_to_shoot 上膛推球馬達（把球推入射手飛輪）
+     * 用於自動瞄準對齊後：角度+射手轉速都到位時才推球發射
+     */
+    public void runUpToShoot() {
+        up_to_shoot.setControl(outputRequest.withOutput(TO_SHOOT_SP));
+    }
+
+    /**
+     * 只停止 up_to_shoot 上膛推球馬達
+     * ⚠ DutyCycleOut 是 set-and-hold 模式，不主動停止它會繼續轉
+     */
+    public void stopUpToShoot() {
+        up_to_shoot.stopMotor();
     }
 
     /**

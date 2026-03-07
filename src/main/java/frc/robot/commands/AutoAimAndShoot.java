@@ -10,20 +10,20 @@ import edu.wpi.first.wpilibj.shuffleboard.ShuffleboardTab;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj2.command.Command;
 import frc.robot.Constants.AutoAimConstants;
-import frc.robot.commands.ManualDrive;
 import frc.robot.subsystems.ShooterSubsystem;
 import frc.robot.subsystems.Swerve;
 import frc.robot.subsystems.TransportSubsystem;
 import frc.robot.util.TunableNumber;
 
 /**
- * 自動瞄準並射擊的 Command
+ * 自動瞄準並射擊的 Command (2026 REBUILT)
  * 
  * 功能：
- * 1. 根據機器人目前座標，計算面向目標（Speaker）所需的旋轉角度
+ * 1. 根據機器人目前座標，計算面向目標（Hub）所需的旋轉角度
  * 2. 用 PID 控制底盤旋轉到正確角度（同時駕駛員仍可控制平移）
  * 3. 根據距離自動調整射手轉速
  * 4. 當角度對齊且射手達速時，自動啟動 Transport 送球發射
+ * 5. 中場區域自動切換為回傳模式（朝己方聯盟區射球）
  * 
  * 使用方式：綁定到按鈕的 whileTrue()，放開即停止
  */
@@ -47,11 +47,12 @@ public class AutoAimAndShoot extends Command {
     private GenericEntry angleErrorEntry, rotOutputEntry, targetRpsEntry, currentRpsEntry;
     private GenericEntry isAlignedEntry, isAtSpeedEntry, isFeedingEntry;
 
-    // 目標位置
+    // 目標位置（每週期動態更新）
     private Translation2d m_targetPosition;
 
     // 狀態追蹤
     private boolean m_isFeeding = false;
+    private boolean m_isInOwnZone = true; // 追蹤是否在己方場域
 
     public AutoAimAndShoot(Swerve swerve, ShooterSubsystem shooter, TransportSubsystem transport, ManualDrive manualDrive) {
         this(swerve, shooter, transport, manualDrive, null);
@@ -104,24 +105,13 @@ public class AutoAimAndShoot extends Command {
     public void initialize() {
         m_rotationPID.reset();
         m_isFeeding = false;
+        m_isInOwnZone = true;
 
         // 啟用射擊模式：鎖定操作者旋轉、降低平移速度
         if (m_manualDrive != null) {
             m_manualDrive.setShootingMode(true);
         }
-
-        // 根據聯盟顏色決定目標位置
-        if (m_swerve.isAllianceRed()) {
-            m_targetPosition = new Translation2d(
-                AutoAimConstants.kRedSpeakerX,
-                AutoAimConstants.kRedSpeakerY
-            );
-        } else {
-            m_targetPosition = new Translation2d(
-                AutoAimConstants.kBlueSpeakerX,
-                AutoAimConstants.kBlueSpeakerY
-            );
-        }
+        // 目標位置在 execute() 中每週期動態判斷（依機器人所在場域切換）
     }
 
     @Override
@@ -135,50 +125,113 @@ public class AutoAimAndShoot extends Command {
         Pose2d robotPose = m_swerve.getPose();
         Translation2d robotPosition = robotPose.getTranslation();
 
-        // 2. 計算到目標的向量
-        Translation2d toTarget = m_targetPosition.minus(robotPosition);
-        double distanceToTarget = toTarget.getNorm(); // 距離 (m)
+        // 2. 動態判斷機器人所在區域，決定目標
+        //    己方場域 → 瞄準 Hub 得分 (2026 REBUILT: Fuel 射入 Hub)
+        //    中立區 / 對方場域 → 朝固定角度射回己方聯盟區
+        boolean isRed = m_swerve.isAllianceRed();
+        double robotX = robotPosition.getX();
 
-        // 3. 計算需要面向的角度 (場地座標系)
-        double targetAngleRad = Math.atan2(toTarget.getY(), toTarget.getX());
+        // 目標角度（場地座標系）
+        double targetAngleRad;
+
+        if (isRed) {
+            // 紅方：己方場域在 X > kFieldMidX（場地右半邊）
+            m_isInOwnZone = robotX > AutoAimConstants.kFieldMidX;
+            if (m_isInOwnZone) {
+                // 己方區域：瞄準紅方 Hub
+                m_targetPosition = new Translation2d(
+                    AutoAimConstants.kRedHubX,
+                    AutoAimConstants.kRedHubY);
+                Translation2d toTarget = m_targetPosition.minus(robotPosition);
+                targetAngleRad = Math.atan2(toTarget.getY(), toTarget.getX());
+            } else {
+                // 中立區：朝固定角度射回紅方聯盟區（場地正右方，0°）
+                m_targetPosition = null; // 不需要目標點
+                targetAngleRad = AutoAimConstants.kRedReturnAngleRad;
+            }
+        } else {
+            // 藍方：己方場域在 X < kFieldMidX（場地左半邊）
+            m_isInOwnZone = robotX < AutoAimConstants.kFieldMidX;
+            if (m_isInOwnZone) {
+                // 己方區域：瞄準藍方 Hub
+                m_targetPosition = new Translation2d(
+                    AutoAimConstants.kBlueHubX,
+                    AutoAimConstants.kBlueHubY);
+                Translation2d toTarget = m_targetPosition.minus(robotPosition);
+                targetAngleRad = Math.atan2(toTarget.getY(), toTarget.getX());
+            } else {
+                // 中立區：朝固定角度射回藍方聯盟區（場地正左方，180°）
+                m_targetPosition = null; // 不需要目標點
+                targetAngleRad = AutoAimConstants.kBlueReturnAngleRad;
+            }
+        }
+
+        // 3. 計算到目標的距離（己方區域用實際距離，中立區用估算）
+        double distanceToTarget;
+        if (m_isInOwnZone && m_targetPosition != null) {
+            distanceToTarget = m_targetPosition.minus(robotPosition).getNorm();
+        } else {
+            // 中立區沒有特定目標點，用到 Hub 的距離估算（僅用於 debug 顯示）
+            Translation2d hubPos = isRed
+                ? new Translation2d(AutoAimConstants.kRedHubX, AutoAimConstants.kRedHubY)
+                : new Translation2d(AutoAimConstants.kBlueHubX, AutoAimConstants.kBlueHubY);
+            distanceToTarget = hubPos.minus(robotPosition).getNorm();
+        }
 
         // 4. 目前機器人朝向
         double currentAngleRad = robotPose.getRotation().getRadians();
 
-        // 5. PID 計算旋轉速度
+        // 6. PID 計算旋轉速度（不限制最大值，讓底盤全速旋轉對齊）
         double rotationOutput = m_rotationPID.calculate(currentAngleRad, targetAngleRad);
-        // 限制最大旋轉速度 (rad/s)
-        rotationOutput = Math.max(-3.0, Math.min(3.0, rotationOutput));
 
-        // 6. 透過 setAimSpeed 疊加旋轉（不影響駕駛員的平移控制）
+        // 7. 透過 setAimSpeed 疊加旋轉（不影響駕駛員的平移控制）
         m_swerve.setAimSpeed(new edu.wpi.first.math.kinematics.ChassisSpeeds(0, 0, rotationOutput));
 
-        // 7. 根據距離查表取得目標射手 RPS
-        double targetRps = interpolateRps(distanceToTarget);
+        // 8. 根據區域決定射手 RPS
+        //    己方場域 → 根據距離查表（精準射擊得分）
+        //    中立區  → 固定高速（只需把球射回己方區域）
+        double targetRps;
+        if (m_isInOwnZone) {
+            targetRps = interpolateRps(distanceToTarget);
+        } else {
+            targetRps = AutoAimConstants.kMidFieldReturnRps;
+        }
 
-        // 8. 設定射手速度
+        // 9. 設定射手速度（按下按鈕就開始轉，不等對齊）
         m_shooter.setTargetVelocity(targetRps);
 
-        // 9. 判斷是否可以發射
-        boolean isAligned = m_rotationPID.atSetpoint();
+        // 10. 判斷角度對齊（使用遲滯邏輯防止連射中斷）
+        double angleErrorRad = MathUtil.angleModulus(targetAngleRad - currentAngleRad);
+        double angleErrorDeg = Math.abs(Math.toDegrees(angleErrorRad));
+        
+        // 遲滯 (Hysteresis)：
+        //   - 尚未送球 → 需嚴格對齊 (≤ kRotationToleranceDeg, 預設 2°) 才開始
+        //   - 已在送球 → 使用寬鬆閾值 (≤ kFeedingHysteresisDeg, 預設 5°) 保持連射
+        //   這樣移動過程中的些許角度偏差不會中斷送球
+        boolean isAligned;
+        if (m_isFeeding) {
+            isAligned = angleErrorDeg <= AutoAimConstants.kFeedingHysteresisDeg;
+        } else {
+            isAligned = angleErrorDeg <= AutoAimConstants.kRotationToleranceDeg;
+        }
+        
         boolean isAtSpeed = m_shooter.isAtSpeed(targetRps, AutoAimConstants.kShooterToleranceRps);
 
-        // 10. 角度對齊 + 射手達速 → 送球
+        // 11. Transport 輸送帶一直運轉，預送球到待發位置
+        m_transport.runTransportOnly();
+
+        // 12. 角度對齊 + 射手達速 → 啟動 up_to_shoot 推球進射手飛輪
         if (isAligned && isAtSpeed) {
-            if (!m_isFeeding) {
-                m_isFeeding = true;
-            }
-            m_transport.runTransport(); // 啟動 Transport 送球
+            m_transport.runUpToShoot();
+            m_isFeeding = true;
         } else {
-            if (m_isFeeding) {
-                m_transport.stopTransport(); // 還沒準備好就停止送球
-                m_isFeeding = false;
-            }
+            // 超出遲滯範圍或射手失速 → 停止推球（但輸送帶繼續）
+            // ⚠ DutyCycleOut 是 set-and-hold，不主動停止 up_to_shoot 它會繼續轉
+            m_transport.stopUpToShoot();
+            m_isFeeding = false;
         }
 
         // Debug 資訊
-        // 角度誤差需要正確處理 ±π 包裝，避免顯示 ±360° 跳動
-        double angleErrorRad = MathUtil.angleModulus(targetAngleRad - currentAngleRad);
         if (distanceEntry != null) {
             distanceEntry.setDouble(distanceToTarget);
             targetAngleEntry.setDouble(Math.toDegrees(targetAngleRad));

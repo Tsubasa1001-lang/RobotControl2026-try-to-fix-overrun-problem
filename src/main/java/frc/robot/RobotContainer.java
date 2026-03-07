@@ -306,18 +306,15 @@ public class RobotContainer {
         swerve.resetPoseToLimelight();
         
         swerve.run();
-        Commands.parallel(
+        // 進入 Teleop 時震動手把提示（必須 schedule 才會執行）
+        CommandScheduler.getInstance().schedule(
             Commands.sequence(
                 Commands.runOnce(() -> driverController.setRumble(RumbleType.kBothRumble, 1)),
-                Commands.waitSeconds(0.5)
-            ).finallyDo(() -> driverController.setRumble(RumbleType.kBothRumble, 0)),
-            Commands.sequence(
-                Commands.runOnce(() -> driverController.setRumble(RumbleType.kBothRumble, 1)),
-                Commands.waitSeconds(0.2),
+                Commands.waitSeconds(0.3),
                 Commands.runOnce(() -> driverController.setRumble(RumbleType.kBothRumble, 0)),
-                Commands.waitSeconds(0.2),
+                Commands.waitSeconds(0.1),
                 Commands.runOnce(() -> driverController.setRumble(RumbleType.kBothRumble, 1)),
-                Commands.waitSeconds(0.2)
+                Commands.waitSeconds(0.3)
             ).finallyDo(() -> driverController.setRumble(RumbleType.kBothRumble, 0))
         );
     }

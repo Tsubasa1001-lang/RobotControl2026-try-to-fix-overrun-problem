@@ -27,14 +27,31 @@ public final class Constants {
   public static final String kLimelightName = "limelight";
 
   // ===== 自動瞄準射擊相關常數 =====
+  // 2026 REBUILT: 射入 Hub 得分（Fuel 遊戲物件）
   public static final class AutoAimConstants {
-    // 目標位置 (藍方 Speaker 開口中心，WPILib 場地座標系)
-    // ⚠️ 請根據你的實際比賽場地量測後修改這些值！
-    public static final double kBlueSpeakerX = 0.0;   // Speaker 在場地 X 座標 (m)
-    public static final double kBlueSpeakerY = 5.55;  // Speaker 在場地 Y 座標 (m)
-    // 紅方 Speaker 位置（場地對稱，X ≈ 16.54m）
-    public static final double kRedSpeakerX = 16.54;
-    public static final double kRedSpeakerY = 5.55;
+    // ── 場地尺寸 ──
+    public static final double kFieldLengthMeters = 16.541; // 場地總長度 (m)（官方 2026 REBUILT）
+    public static final double kFieldWidthMeters = 8.069;   // 場地總寬度 (m)
+    public static final double kFieldMidX = kFieldLengthMeters / 2.0; // 中場線 X ≈ 8.27m
+
+    // ── Hub 目標座標（己方場域內瞄準得分） ──
+    // 2026 REBUILT: Hub 在場地中央區域，不在牆壁邊！
+    // 座標由官方 AprilTag JSON (2026-rebuilt-welded.json) 計算 Hub 中心位置
+    // 紅方 Hub: AprilTag 2-5, 8-11 中心
+    // 藍方 Hub: AprilTag 18-21, 24-27 中心
+    // ⚠️ 這些值是從 AprilTag 座標估算的 Hub 中心，請根據實際場地微調！
+    public static final double kBlueHubX = 4.626;   // 藍方 Hub X 座標 (m)（場地左半部）
+    public static final double kBlueHubY = 4.035;   // 藍方 Hub Y 座標 (m)（場地中央偏下）
+    public static final double kRedHubX = 11.915;   // 紅方 Hub X 座標 (m)（場地右半部）
+    public static final double kRedHubY = 4.035;    // 紅方 Hub Y 座標 (m)（場地中央偏下）
+
+    // ── 中立區回傳：朝固定角度射回己方聯盟區 ──
+    // 在中立區時，不需要瞄準特定座標點，只需讓機器人面向己方聯盟區方向即可
+    // 角度使用場地座標系（wpiBlue），0° = 場地正右(+X)，90° = 場地正上(+Y)，180°/-180° = 場地正左(-X)
+    // 紅方聯盟區在場地右邊(+X) → 朝 0° 射
+    // 藍方聯盟區在場地左邊(-X) → 朝 180° 射
+    public static final double kRedReturnAngleRad = 0.0;          // 紅方：朝場地正右 (0°)
+    public static final double kBlueReturnAngleRad = Math.PI;     // 藍方：朝場地正左 (180°)
 
     // 旋轉 PID（控制底盤面向目標）
     public static final double kRotation_kP = 5.0;
@@ -44,7 +61,7 @@ public final class Constants {
 
     // 距離 → 射手 RPS 對照表
     // 格式: {距離(m), RPS}，距離由近到遠排列
-    // ⚠️ 這些值需要在實際場地測試後調整！
+    // ⚠️ 這些值需要在實際場地測試後調整！(2026 REBUILT Hub 距離)
     public static final double[][] kDistanceToRpsTable = {
       {1.0, 35},   // 1m → 35 RPS
       {1.5, 40},   // 1.5m → 40 RPS
@@ -59,7 +76,18 @@ public final class Constants {
     // 射手速度容許誤差 (RPS)
     public static final double kShooterToleranceRps = 3.0;
 
-    // 射擊模式下底盤平移速度倍率（1.0 = 全速，0.3 = 30% 速度）
+    // 中立區回傳球固定射手 RPS
+    // 因為距離遠且不需要精準進 Hub，用固定高速射回即可
+    // ⚠️ 請在實際場地測試後調整！
+    public static final double kMidFieldReturnRps = 70.0;
+
+    // 送球遲滯角度 (Hysteresis)：
+    // 首次觸發送球需 ≤ kRotationToleranceDeg (2°)
+    // 一旦開始送球，放寬到 kFeedingHysteresisDeg，避免移動中微小偏差中斷連射
+    public static final double kFeedingHysteresisDeg = 5.0;
+
+    // 射擊模式下底盤平移速度倍率
+    // 降低平移速度避免因慣性導致球射偏（1.0 = 全速，0.3 = 30% 速度）
     public static final double kShootingModeSpeedMultiplier = 0.3;
   }
 

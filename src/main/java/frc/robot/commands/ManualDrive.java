@@ -70,7 +70,7 @@ public class ManualDrive extends Command {
 
         // ═══════════════ 射擊模式 ═══════════════
         // 鎖定旋轉（AutoAim PID 會透過 setAimSpeed 疊加控制旋轉）
-        // 降低平移速度，讓操作者可以微調位置但不會跑太快
+        // 降低平移速度，避免移動慣性導致球射偏目標
         if (shootingMode) {
             zCtl = 0; // 旋轉歸零，完全交給 AutoAim
             double shootingMultiplier = AutoAimConstants.kShootingModeSpeedMultiplier;
@@ -112,8 +112,7 @@ public class ManualDrive extends Command {
     /**
      * 設定射擊模式。啟用時：
      * - 右搖桿旋轉輸入歸零（旋轉完全由 AutoAim PID 控制）
-     * - 左搖桿平移速度降低為 kShootingModeSpeedMultiplier（預設 30%）
-     * - 操作者仍可用左搖桿微調位置
+     * - 左搖桿平移速度降低為 kShootingModeSpeedMultiplier（預設 30%），避免慣性導致球射偏
      */
     public void setShootingMode(boolean enabled) {
         this.shootingMode = enabled;
