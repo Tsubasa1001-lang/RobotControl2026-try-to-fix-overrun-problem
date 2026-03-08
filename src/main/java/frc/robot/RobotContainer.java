@@ -9,6 +9,7 @@ import frc.robot.Constants.AutoAimConstants;
 import frc.robot.commands.Drive2Tag;
 import frc.robot.commands.ManualDrive;
 import frc.robot.commands.AutoAimAndShoot;
+import frc.robot.commands.AutoAimShootAuto;
 import frc.robot.subsystems.IntakeArmSubsystem;
 import frc.robot.subsystems.IntakeRollerSubsystem;
 import frc.robot.subsystems.Swerve;
@@ -119,6 +120,10 @@ public class RobotContainer {
                 .finallyDo(() -> shooterSubsystem.stopShooter()));
 
         NamedCommands.registerCommand("Auto Shoot", createAutoShootCommand());
+        // "Auto Aim Shoot"：自動旋轉對齊 Hub + 依距離調 RPS + 達速送球 + 射完自動結束
+        // 與手操 AutoAimAndShoot 同樣邏輯，但佔用 swerve 做原地旋轉
+        NamedCommands.registerCommand("Auto Aim Shoot",
+            new AutoAimShootAuto(swerve, shooterSubsystem, transport));
         // "Far Auto Shoot" 不再需要，統一用自適應 "Auto Shoot"
         NamedCommands.registerCommand("Far Auto Shoot", createAutoShootCommand());
         NamedCommands.registerCommand("Auto Intake", createAutoIntakeCommand());
