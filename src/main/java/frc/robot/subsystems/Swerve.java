@@ -91,11 +91,24 @@ public class Swerve extends SubsystemBase {
         this.limelightName = limelightName;
         isUseLimelight = true;
         initFields();
+
+        // 模擬環境：將初始位置設在場地中央，避免因紅方速度反轉跑出場地邊界看不見
+        Pose2d initialPose;
+        if (RobotBase.isSimulation()) {
+            initialPose = new Pose2d(
+                Constants.AutoAimConstants.kFieldLengthMeters / 2.0,
+                Constants.AutoAimConstants.kFieldWidthMeters / 2.0,
+                Rotation2d.fromDegrees(0));
+            simGyroAngleDeg = 0;
+        } else {
+            initialPose = new Pose2d();
+        }
+
         poseEstimator = new SwerveDrivePoseEstimator(
                 SwerveConstants.kSwerveKinematics,
                 getGyroAngle(),
                 getModulePositions(),
-                new Pose2d(),
+                initialPose,
                 VecBuilder.fill(0.05, 0.05, Units.degreesToRadians(5)),
                 VecBuilder.fill(0.5, 0.5, Units.degreesToRadians(30)));
     }
@@ -186,6 +199,10 @@ public class Swerve extends SubsystemBase {
         );
 
         setSpeed(0, 0, 0, false);
+
+        // ⚠️ 不要在這裡呼叫 SmartDashboard.putData("Field", m_field)！
+        // Field2d 會在 ShuffleboardManager.setupMainTab() 中透過 Shuffleboard API 發佈。
+        // 同一個 Sendable 物件只能綁定到一個 NT 路徑，雙重發佈會導致其中一個不更新。
     }
 
     @Override

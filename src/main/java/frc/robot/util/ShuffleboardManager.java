@@ -65,7 +65,9 @@ public class ShuffleboardManager {
      * @param autoChooser 自動模式選擇器
      */
     public void setupMainTab(Field2d field2d, SendableChooser<Command> autoChooser) {
-        // 場地圖 — 佔最大面積
+        // 場地圖 — 只透過 Shuffleboard 發佈（不可同時用 SmartDashboard.putData，
+        // 否則 Sendable 雙重綁定會導致其中一個路徑不更新）
+        // Glass/SimGUI 中請打開 /Shuffleboard/Main/Field 來查看
         mainTab.add("Field", field2d)
                .withWidget(BuiltInWidgets.kField)
                .withSize(6, 4)
