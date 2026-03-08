@@ -102,7 +102,13 @@ public class ShooterSubsystem extends SubsystemBase {
         config.Slot0.kS = tunableKS.get();
 
         leaderMotor.getConfigurator().apply(config);
-        followerMotor.getConfigurator().apply(config);
+
+        // Follower 設定：只需要 NeutralMode，不需要 PID
+        // Follower 模式下馬達直接複製 Leader 的輸出電壓，不會跑自己的閉環 PID，
+        // 因此套用 PID 參數是多餘的。反轉邏輯統一由 Follower(..., Opposed) 處理。
+        TalonFXConfiguration followerConfig = new TalonFXConfiguration();
+        followerConfig.MotorOutput.NeutralMode = NeutralModeValue.Coast;
+        followerMotor.getConfigurator().apply(followerConfig);
 
         followerMotor.setControl(new Follower(leaderMotor.getDeviceID(), MotorAlignmentValue.Opposed));
 

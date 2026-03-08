@@ -111,11 +111,14 @@ public class IntakeArmSubsystem extends SubsystemBase {
 
         // 套用設定
         leaderMotor.getConfigurator().apply(config);
-        followerMotor.getConfigurator().apply(config);
 
-        // 4. 設定 Follower
-        // 假設兩顆馬達是對裝 (面對面)，通常需要反轉其中一顆
-        // 請先在 Tuner X 確認兩顆馬達是否互斥，如果互斥就把 true 改 false，或改 Config 的 Inverted
+        // 4. Follower 設定：只需要 NeutralMode，不需要 PID
+        //    Follower 模式下馬達直接複製 Leader 的輸出電壓，不會跑自己的閉環 PID，
+        //    因此套用 PID 參數是多餘的。反轉邏輯統一由 Follower(..., Opposed) 處理。
+        TalonFXConfiguration followerConfig = new TalonFXConfiguration();
+        followerConfig.MotorOutput.NeutralMode = NeutralModeValue.Brake;
+        followerMotor.getConfigurator().apply(followerConfig);
+
         followerMotor.setControl(new Follower(leaderMotor.getDeviceID(), MotorAlignmentValue.Opposed));
         
         // 歸零：假設機器人啟動時，Intake 是處於「收起」的狀態 (0度)

@@ -111,12 +111,10 @@ public class IntakeRollerSubsystem extends SubsystemBase {
         // 4. 套用設定給 Leader
         leaderMotor.getConfigurator().apply(config);
 
-        // 5. Follower 設定
+        // 5. Follower 設定：只需要 NeutralMode + CurrentLimits，不需要 PID
+        //    Follower 模式下馬達直接複製 Leader 的輸出電壓，不會跑自己的閉環 PID，
+        //    因此套用 PID 參數是多餘的。反轉邏輯統一由 Follower(..., Opposed) 處理。
         TalonFXConfiguration followerConfig = new TalonFXConfiguration();
-        followerConfig.Slot0.kV = tunableKV.get();
-        followerConfig.Slot0.kP = tunableKP.get();
-        followerConfig.Slot0.kI = tunableKI.get();
-        followerConfig.Slot0.kD = tunableKD.get();
         followerConfig.CurrentLimits.StatorCurrentLimitEnable = true;
         followerConfig.CurrentLimits.StatorCurrentLimit = IntakeRollerConstants.kStatorCurrentLimit;
         followerConfig.CurrentLimits.SupplyCurrentLimitEnable = true;

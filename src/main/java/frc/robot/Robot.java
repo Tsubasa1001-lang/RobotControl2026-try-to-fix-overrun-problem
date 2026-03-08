@@ -25,7 +25,8 @@ public class Robot extends TimedRobot {
   private final ShuffleboardManager m_shuffleboard;
 
   // ── Loop 計時器：接上實體機器後可在 SmartDashboard 看到迴圈耗時 ──
-  private double loopStartTime = 0;
+  // 使用「上一次進入 → 這一次進入」的間隔測量，包含完整迴圈（含 LiveWindow、SmartDashboard flush 等）
+  private double lastLoopTimestamp = 0;
   private double maxLoopTime = 0;
   private int telemetryCounter = 0;
 
@@ -50,8 +51,14 @@ public class Robot extends TimedRobot {
    */
   @Override
   public void robotPeriodic() {
-    // ── 迴圈計時開始 ──
-    loopStartTime = Timer.getFPGATimestamp();
+    // ── 迴圈間隔測量：從「上一次進入 robotPeriodic」到「這一次進入」的完整間隔 ──
+    // 這包含了 CommandScheduler.run()、teleopPeriodic()、LiveWindow、SmartDashboard flush 等
+    // 比舊版只測 CommandScheduler.run() 更準確
+    double currentTimestamp = Timer.getFPGATimestamp();
+    double loopTime = (lastLoopTimestamp > 0)
+        ? (currentTimestamp - lastLoopTimestamp) * 1000.0  // ms
+        : 0.0;  // 第一次呼叫沒有上一次的時間戳
+    lastLoopTimestamp = currentTimestamp;
 
     // Runs the Scheduler.  This is responsible for polling buttons, adding newly-scheduled
     // commands, running already-scheduled commands, removing finished or interrupted commands,
@@ -59,12 +66,12 @@ public class Robot extends TimedRobot {
     // block in order for anything in the Command-based framework to work.
     CommandScheduler.getInstance().run();
 
-    // ── 迴圈計時結束：計算本次耗時 ──
-    double loopTime = (Timer.getFPGATimestamp() - loopStartTime) * 1000.0; // 轉換為 ms
-    if (loopTime > maxLoopTime) {
+    // ── 迴圈耗時統計 ──
+    if (loopTime > maxLoopTime && loopTime < 200.0) {
+      // 忽略 > 200ms 的異常值（例如 Disabled → Enabled 的模式切換間隔）
       maxLoopTime = loopTime;
     }
-    boolean overrun = loopTime > 20.0;
+    boolean overrun = loopTime > 20.5; // 20.5ms 容許微小的排程抖動
 
     // 遙測輸出節流（計時每週期都算，但 NT 寫入降頻）
     if (++telemetryCounter >= Constants.kTelemetryDivider) {
