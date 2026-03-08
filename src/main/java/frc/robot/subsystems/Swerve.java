@@ -366,26 +366,23 @@ public class Swerve extends SubsystemBase {
     }
 
     /**
-     * set the moving speed - Input range: [-1, 1]
+     * 設定底盤移動速度。
+     * 呼叫端應傳入 WPILib 標準正負號：+X=前進, +Y=左移, +Z=逆時針旋轉
      * 
-     * @param xSpeed percent power in the X direction (X 方向的功率百分比)
-     * @param ySpeed percent power in the Y direction (Y 方向的功率百分比)
-     * @param zSpeed percent power for rotation (旋轉的功率百分比)
-     * @param fieldOriented configure robot movement style (設置機器運動方式) (field or robot oriented)
+     * @param xSpeed 前後速度 (m/s)，正 = 前進
+     * @param ySpeed 左右速度 (m/s)，正 = 左移
+     * @param zSpeed 旋轉速度 (rad/s)
+     * @param fieldOriented true = 場地導向, false = 機器人導向
      */
 
     public void setSpeed(double xSpeed, double ySpeed, double zSpeed, boolean fieldOriented) {
         if (fieldOriented) {
-            // IMU used for field oriented control
-            // IMU 用於 Field Oriented Control
-            // 如果我們在紅方，駕駛員的「前進」和「向左」相對於場地座標是顛倒的
-            // 這還沒測試!!!!! 需要測試!!
+            // 如果我們在紅方，駕駛員的「前進」和「向左」相對於場地座標是 180° 旋轉的
             if (isAllianceRed()) {
                 xSpeed = -xSpeed;
                 ySpeed = -ySpeed;
             }
-            mTargetChassisSpeeds = ChassisSpeeds.fromFieldRelativeSpeeds(-xSpeed, -ySpeed, zSpeed, getGyroAngle());
-            // SmartDashboard.putNumber("Gyro/Logic Angle (Deg)", logicAngle);
+            mTargetChassisSpeeds = ChassisSpeeds.fromFieldRelativeSpeeds(xSpeed, ySpeed, zSpeed, getGyroAngle());
         } else {
             mTargetChassisSpeeds = new ChassisSpeeds(xSpeed, ySpeed, zSpeed);
         }
@@ -485,38 +482,34 @@ public class Swerve extends SubsystemBase {
     }
 
     /**
-     * Set robot pose
-     * 將測程法（odometry）位置設置為給與的 x、y、位置和角度
+     * Set robot pose — 同時同步 IMU yaw。
+     * 將測程法（odometry）位置設置為給與的 x、y、位置和角度，
+     * 並把 Pigeon2 的 yaw 設為 pose 的旋轉角度，確保 field-oriented 驅動正確。
      * 
-     * @param pose robot pose
+     * @param pose robot pose（藍方原點座標系）
      */
     public void setPose(Pose2d pose) {
-        if (isUseLimelight) {
-            poseEstimator.resetPosition(getGyroAngle(), getModulePositions(), pose);
-        } else {
-            mOdometry.resetPosition(getGyroAngle(), getModulePositions(), pose);
-        }
-    }
-
-    public void resetPose(Pose2d pose) {
-        // 將 IMU 的 yaw 同步為目標位姿的角度
-        // 這是 PathPlanner 在 auto 開始時呼叫的方法（resetOdom: true）
-        // 同步 IMU 後，auto 結束進入 teleop 時角度就已經是場地座標，不需要手動校正
+        // ── 同步 IMU yaw，讓 field-oriented 驅動的角度基準與位姿一致 ──
         double headingDeg = pose.getRotation().getDegrees();
         mPigeonIMU.setYaw(headingDeg);
         if (RobotBase.isSimulation()) {
             simGyroAngleDeg = headingDeg;
         }
 
-        // 用已經同步好的 gyro 角度來重設 poseEstimator / odometry
         Rotation2d newGyroAngle = getGyroAngle();
-        if (poseEstimator != null) {
+        if (isUseLimelight) {
             poseEstimator.resetPosition(newGyroAngle, getModulePositions(), pose);
-        }
-        
-        if (mOdometry != null) {
+        } else {
             mOdometry.resetPosition(newGyroAngle, getModulePositions(), pose);
         }
+    }
+
+    /**
+     * PathPlanner 在 auto 開始時呼叫的方法（resetOdom: true）。
+     * 現在直接委派給 setPose()，因為 setPose() 已經會同步 IMU yaw。
+     */
+    public void resetPose(Pose2d pose) {
+        setPose(pose);
     }
     public double getMaxVelocity() {
         // 使用 Constants 中根據齒輪比和輪徑計算出的物理最大速度
@@ -566,17 +559,17 @@ public class Swerve extends SubsystemBase {
         );
     }
 
+    /**
+     * 緊急重設 IMU（綁定在按鈕 8）。
+     * 自動偵測聯盟色：藍方 → 0°，紅方 → 180°（WPILib 藍方原點座標系）。
+     */
     public void resetIMU() {
-        resetIMU(0);
+        resetIMU(isAllianceRed() ? 180.0 : 0.0);
     }
 
     public void resetIMU(double angle) {
-        mPigeonIMU.reset();
-        mPigeonIMU.setYaw(angle);
-        if (RobotBase.isSimulation()) {
-            simGyroAngleDeg = angle;
-        }
-        // 同步重設 poseEstimator / odometry 的航向，避免 IMU 與位姿估計不一致
+        // 保留位置 XY，只將航向重設為指定角度
+        // setPose() 內部會同步 IMU yaw + poseEstimator/odometry
         Pose2d currentPose = getPose();
         Pose2d correctedPose = new Pose2d(currentPose.getTranslation(), Rotation2d.fromDegrees(angle));
         setPose(correctedPose);

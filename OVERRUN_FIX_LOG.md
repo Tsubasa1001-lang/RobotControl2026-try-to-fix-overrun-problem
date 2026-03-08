@@ -13,7 +13,7 @@ FRC 機器人使用 `TimedRobot` 架構，預設每 **20ms** 執行一次 `robot
 當單次迴圈執行時間超過 20ms，Driver Station 就會顯示 **"Loop overrun"** 警告，  
 導致控制訊號延遲、動作卡頓，甚至影響比賽安全。
 
-本次共修復 **5 個初始問題 + 10 個後續優化**，涵蓋全部主要檔案。
+本次共修復 **5 個初始問題 + 12 個後續優化**，涵蓋全部主要檔案。
 
 ---
 
@@ -782,22 +782,227 @@ if (hasNewPIDValues) {
 
 ---
 
+### 修復 16 — IMU 重設與聯盟色感知 — `Swerve.java`
+
+| 項目 | 內容 |
+|------|------|
+| **檔案** | `src/main/java/frc/robot/subsystems/Swerve.java` |
+| **位置** | `setPose()`, `resetPose()`, `resetIMU()`, `resetIMU(double)` |
+| **嚴重程度** | 🔴 高 — 紅方聯盟 field-oriented 驅動方向完全反轉 |
+
+#### 16a — `setPose()` 不同步 IMU yaw
+
+```java
+// ❌ 修改前：只重設 poseEstimator/odometry，IMU yaw 不變
+public void setPose(Pose2d pose) {
+    poseEstimator.resetPosition(getGyroAngle(), getModulePositions(), pose);
+}
+// 問題：IMU 與位姿的角度不一致，field-oriented 駕駛基準錯誤
+
+// ✅ 修改後：同步 IMU yaw，確保 field-oriented 驅動正確
+public void setPose(Pose2d pose) {
+    double headingDeg = pose.getRotation().getDegrees();
+    mPigeonIMU.setYaw(headingDeg);          // 同步 IMU
+    if (RobotBase.isSimulation()) {
+        simGyroAngleDeg = headingDeg;
+    }
+    Rotation2d newGyroAngle = getGyroAngle();
+    poseEstimator.resetPosition(newGyroAngle, getModulePositions(), pose);
+}
+```
+
+**為什麼要這樣做**：`setPose()` 是設定機器人位姿的基礎方法，被 `resetPoseToLimelight()`、`resetIMU(double)` 等間接呼叫。  
+如果只重設 poseEstimator 而不同步 IMU，`getGyroAngle()` 回傳的角度仍是舊值，  
+field-oriented 駕駛的前進方向會與機器人實際朝向脫節。
+
+#### 16b — `resetPose()` 簡化為委派 `setPose()`
+
+```java
+// ❌ 修改前：resetPose() 自己也做一遍完整的 IMU 同步 + poseEstimator 重設
+public void resetPose(Pose2d pose) {
+    mPigeonIMU.setYaw(headingDeg);
+    poseEstimator.resetPosition(...);
+    mOdometry.resetPosition(...);
+}
+
+// ✅ 修改後：直接委派，消除重複邏輯
+public void resetPose(Pose2d pose) {
+    setPose(pose);
+}
+```
+
+**為什麼要這樣做**：`setPose()` 現在已經完整處理 IMU + poseEstimator 同步，  
+`resetPose()`（PathPlanner `resetOdom: true` 呼叫的方法）不需要重複實作，單純委派即可。
+
+#### 16c — `resetIMU()` 聯盟色感知
+
+```java
+// ❌ 修改前：永遠重設為 0°
+public void resetIMU() {
+    resetIMU(0);
+}
+// 問題：紅方聯盟開機時機器人面向藍方（WPILib 藍方原點座標系 = 180°），卻被重設為 0°
+
+// ✅ 修改後：自動偵測聯盟色
+public void resetIMU() {
+    resetIMU(isAllianceRed() ? 180.0 : 0.0);
+}
+```
+
+**為什麼要這樣做**：WPILib 使用藍方原點座標系，藍方面向對面是 0°，紅方面向對面是 180°。  
+機器人開機或緊急按按鈕 8 時，`resetIMU()` 必須根據聯盟色設定正確的初始角度，  
+否則 field-oriented 駕駛和 PathPlanner 路徑的方向都會反轉。
+
+#### 16d — `resetIMU(double)` 消除冗餘
+
+```java
+// ❌ 修改前：先手動設 IMU，再呼叫 setPose()（內部又設一次 IMU）
+public void resetIMU(double angle) {
+    mPigeonIMU.reset();
+    mPigeonIMU.setYaw(angle);      // 第一次設定
+    setPose(correctedPose);         // 第二次設定（setPose 內部也 setYaw）
+}
+
+// ✅ 修改後：只透過 setPose() 統一處理
+public void resetIMU(double angle) {
+    Pose2d currentPose = getPose();
+    Pose2d correctedPose = new Pose2d(currentPose.getTranslation(), Rotation2d.fromDegrees(angle));
+    setPose(correctedPose);
+}
+```
+
+**為什麼要這樣做**：`setPose()` 已經是唯一的 IMU 同步入口，所有需要重設角度的方法  
+都應該透過它，避免散落在多處的 `setYaw()` 呼叫造成維護困難或遺漏。
+
+---
+
+### 修復 17 — 專案清理與 Deprecated API 消除
+
+| 項目 | 內容 |
+|------|------|
+| **涉及檔案** | 6 個檔案（刪除 2 個 + 修改 4 個） |
+| **嚴重程度** | 🟡 中 — 編譯警告 9 個 + 死碼累積 |
+
+#### 17a — 刪除 `DriveSubsystem.java`
+
+```java
+// ❌ 修改前：空殼類別，只有空的建構子
+public class DriveSubsystem extends SubsystemBase {
+    public DriveSubsystem(Swerve swerve) {
+        // AutoBuilder.configure() 已移至 RobotContainer 統一管理
+    }
+}
+
+// ✅ 修改後：直接刪除檔案
+// 同時清理 RobotContainer 中的 import 和註解
+```
+
+**為什麼要這樣做**：`DriveSubsystem` 的 `AutoBuilder.configure()` 已在修復 4 時移至 `RobotContainer`，  
+檔案只剩空殼，保留只會混淆維護者。
+
+#### 17b — 刪除 `AutoAim.java`
+
+```java
+// ❌ 修改前：整份檔案都被註解起來（100+ 行死碼）
+// public class AutoAim extends SubsystemBase { ... }
+
+// ✅ 修改後：直接刪除檔案
+// 瞄準邏輯已轉移至 AutoAimAndShoot.java Command
+```
+
+**為什麼要這樣做**：`AutoAim` 的功能已被 `AutoAimAndShoot` 完全取代，  
+留下全部被註解的舊檔案只會與新 Command 混淆。
+
+#### 17c — 消除 Phoenix 6 Deprecated API 警告（3 處）
+
+```java
+// ❌ 修改前：使用已棄用的 String 參數構造函數（9 個 warning 中的 3 個）
+throttleMotor = new TalonFX(throttleID, "DRIVETRAIN");
+rotorMotor = new TalonFX(rotorID, "DRIVETRAIN");
+mRotorEncoder = new CANcoder(rotorEncoderID, "DRIVETRAIN");
+
+// ✅ 修改後：使用 CANBus 物件（Phoenix 6 v26+ 標準）
+// Constants.java — 新增靜態常數
+public static final CANBus kDrivetrainCANBus = new CANBus("DRIVETRAIN");
+
+// SwerveModuleKraken.java
+throttleMotor = new TalonFX(throttleID, SwerveConstants.kDrivetrainCANBus);
+rotorMotor = new TalonFX(rotorID, SwerveConstants.kDrivetrainCANBus);
+
+// SwerveModule.java
+mRotorEncoder = new CANcoder(rotorEncoderID, SwerveConstants.kDrivetrainCANBus);
+```
+
+**為什麼要這樣做**：Phoenix 6 v26 標記 `new TalonFX(int, String)` 和 `new CANcoder(int, String)` 為  
+`@Deprecated(forRemoval=true)`，2027 將移除。改用 `CANBus` 物件是官方推薦做法，  
+同時統一 CAN bus 名稱到單一常數，避免多處寫死字串。
+
+#### 17d — 消除 REVLib Deprecated API 警告（6 處）
+
+```java
+// ❌ 修改前：使用已棄用的 SparkBase.ResetMode / SparkBase.PersistMode
+import com.revrobotics.spark.SparkBase.PersistMode;
+import com.revrobotics.spark.SparkBase.ResetMode;
+throttleMotor.configure(config, ResetMode.kResetSafeParameters, PersistMode.kPersistParameters);
+
+// ✅ 修改後：使用新的頂層類別
+import com.revrobotics.PersistMode;
+import com.revrobotics.ResetMode;
+throttleMotor.configure(config, ResetMode.kResetSafeParameters, PersistMode.kPersistParameters);
+// 方法呼叫不變，只有 import 路徑改為 com.revrobotics.* 頂層
+```
+
+**為什麼要這樣做**：REVLib 2026 將內嵌在 `SparkBase` 的 `ResetMode`/`PersistMode` 標為  
+`@Deprecated(since="2026", forRemoval=true)`，並提供頂層替代類別。
+
+#### 17e — 清理 `ShooterSubsystem.sys_manualShoot()`
+
+```java
+// ❌ 修改前：參數用 int、Javadoc 提到 triggerInput、殘留板機死區註解
+public Command sys_manualShoot(int TargetRPS) {
+    return this.runEnd(
+        () -> {
+            // double rawValue = triggerInput.getAsDouble();
+            // double adjustedValue = MathUtil.applyDeadband(rawValue, TRIGGER_DEADBAND);
+            setVelocity(TargetRPS);
+        },
+        () -> { stop(); }
+    );
+}
+
+// ✅ 修改後：參數改 double、清除誤導註解、精簡
+public Command sys_manualShoot(double targetRps) {
+    return this.runEnd(
+        () -> setVelocity(targetRps),
+        () -> stop()
+    );
+}
+// 同時移除未使用的 import: DoubleSupplier, MathUtil
+```
+
+**為什麼要這樣做**：RPS 是連續值應用 `double`；殘留的板機變速註解  
+與實際「一鍵固定轉速」行為矛盾，會誤導未來維護者。
+
+---
+
 ## 完整修改檔案清單
 
 | # | 檔案 | 修改類型 |
 |---|------|----------|
-| 1 | `Swerve.java` | Overrun 修復 + SlewRateLimiter + IMU 同步 + Limelight 校正 + sim + StatusSignal 快取 + 遙測節流 |
-| 2 | `SwerveModule.java` | CAN 讀取快取 + StatusSignal 快取 |
-| 3 | `SwerveModuleKraken.java` | kMaxPhysicalSpeedMps + sim 物理 + 錯誤處理 + StatusSignal 快取 |
+| 1 | `Swerve.java` | Overrun 修復 + SlewRateLimiter + IMU 同步 + Limelight 校正 + sim + StatusSignal 快取 + 遙測節流 + IMU 聯盟色感知 |
+| 2 | `SwerveModule.java` | CAN 讀取快取 + StatusSignal 快取 + CANcoder CANBus 物件 |
+| 3 | `SwerveModuleKraken.java` | kMaxPhysicalSpeedMps + sim 物理 + 錯誤處理 + StatusSignal 快取 + TalonFX CANBus 物件 |
 | 4 | `LightPollution.java` | LED 更新降頻 |
-| 5 | `DriveSubsystem.java` | 移除重複 AutoBuilder |
-| 6 | `RobotContainer.java` | Command 工廠方法 + AutoAimAndShoot 綁定 + teleopInit 校正 + 聯盟對稱 |
-| 7 | `Constants.java` | kMaxPhysicalSpeedMps + AutoAimConstants + 聯盟對稱 helper + kTelemetryDivider |
+| 5 | ~~`DriveSubsystem.java`~~ | ❌ 已刪除（空殼，AutoBuilder 移至 RobotContainer） |
+| 6 | `RobotContainer.java` | Command 工廠方法 + AutoAimAndShoot 綁定 + teleopInit 校正 + 聯盟對稱 + 清理死碼 import |
+| 7 | `Constants.java` | kMaxPhysicalSpeedMps + AutoAimConstants + 聯盟對稱 helper + kTelemetryDivider + kDrivetrainCANBus |
 | 8 | `ManualDrive.java` | 速度乘數改用 kMaxPhysicalSpeedMps + 遙測節流 |
-| 9 | `ShooterSubsystem.java` | setTargetVelocity / interpolateRps + StatusSignal 快取 + 遙測節流 |
+| 9 | `ShooterSubsystem.java` | setTargetVelocity / interpolateRps + StatusSignal 快取 + 遙測節流 + sys_manualShoot 清理 |
 | 10 | `TransportSubsystem.java` | runTransport / stopTransport + VelocityVoltage 分離 |
 | 11 | `AutoAimAndShoot.java` | 🆕 自動瞄準射擊 Command + 聯盟對稱 + 遙測節流 |
 | 12 | `IntakeRollerSubsystem.java` | VelocityVoltage 閉環 + Follower 修正 + StatusSignal 快取 + 遙測節流 |
 | 13 | `IntakeArmSubsystem.java` | Follower PID 修正 + StatusSignal 快取 + 遙測節流 |
 | 14 | `Robot.java` | Loop 計時監控 + 遙測節流 |
 | 15 | `build.gradle` | includeDesktopSupport = true |
+| 16 | ~~`AutoAim.java`~~ | ❌ 已刪除（全部被註解，功能移至 AutoAimAndShoot） |
+| 17 | `SwerveModuleNeo.java` | REVLib ResetMode/PersistMode import 更新 |

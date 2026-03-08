@@ -29,9 +29,9 @@ public class Drive2Tag extends Command {
      * 建構子
      * @param swerve 底盤
      * @param limelightName Limelight 名稱
-     * @param targetX 目標前後距離 (公尺) - 例如 -0.8 代表停在 Tag 前方 0.8m
-     * @param targetY 目標左右偏移 (公尺) - 0 = 正對, 正數可能是向左, 負數向右 (視你的座標系而定)
-     * @param targetYaw 目標角度 (度) - 通常是 0 或 180，視 Tag 角度而定
+     * @param targetX 目標前後距離 (公尺) - 例如 -1.15 代表 Tag 在機器人前方 1.15m（Limelight tx, forward）
+     * @param targetY 目標左右偏移 (公尺) - 0 = 正對, 正數=左偏, 負數=右偏（Limelight ty, left）
+     * @param targetYaw 目標角度 (度) - 通常是 0（正對 Tag）
      */
     public Drive2Tag(Swerve swerve, String limelightName, double targetX, double targetY, double targetYaw) {
         m_swerve = swerve;
@@ -68,10 +68,14 @@ public class Drive2Tag extends Command {
             double[] targetPose = LimelightHelpers.getTargetPose_RobotSpace(m_limelightName);
             
             if (targetPose != null && targetPose.length >= 6) {
-                // 讀取 Limelight 數據 (根據你的註解對應)
-                double currentX = targetPose[1];
-                double currentY = targetPose[0];
-                double currentYaw = targetPose[4]; 
+                // Limelight targetpose_robotspace 陣列格式:
+                // [0]=tx(前後/forward), [1]=ty(左右/left), [2]=tz(上下/up),
+                // [3]=pitch, [4]=yaw, [5]=roll
+                // WPILib ChassisSpeeds: vx=前後, vy=左右
+                // → currentX(前後) 對應 targetPose[0], currentY(左右) 對應 targetPose[1]
+                double currentX = targetPose[0];  // 前後距離 (forward)
+                double currentY = targetPose[1];  // 左右偏移 (left)
+                double currentYaw = targetPose[4]; // 偏航角 (yaw)
 
                 // SmartDashboard.putNumber("Drive2Tag/Dist_X", currentX);
                 // SmartDashboard.putNumber("Drive2Tag/Dist_Y", currentY);

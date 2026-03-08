@@ -39,10 +39,12 @@ public class ManualDrive extends Command {
 
     @Override
     public void execute() {
-        //input inverse
-        double xCtl = mJoystick.getLeftY();
-        double yCtl = mJoystick.getLeftX();
-        double zCtl = mJoystick.getRightX();
+        // Xbox 搖桿慣例：Y 軸往前推 = -1，X 軸往左推 = -1
+        // WPILib 慣例：前進 = +X，左移 = +Y
+        // 在源頭反轉，後續所有邏輯都用 WPILib 標準正負號
+        double xCtl = -mJoystick.getLeftY();  // 往前推 → +X (前進)
+        double yCtl = -mJoystick.getLeftX();  // 往左推 → +Y (左移)
+        double zCtl = mJoystick.getRightX();  // 右搖桿不反轉（順時針=正）
 
         // SmartDashboard.putNumber("xCtl", xCtl);
         // SmartDashboard.putNumber("yCtl", yCtl);

@@ -44,7 +44,7 @@ public class SwerveModuleKraken extends SwerveModule {
                                 .withNeutralMode(NeutralModeValue.Brake);
         var throttleFeedbeackConfig = new FeedbackConfigs().withSensorToMechanismRatio(1/SwerveConstants.kThrottlePositionConversionFactor);
                                 
-        throttleMotor = new TalonFX(throttleID,"DRIVETRAIN");
+        throttleMotor = new TalonFX(throttleID, SwerveConstants.kDrivetrainCANBus);
         StatusCode status;
         status = throttleMotor.getConfigurator().apply(throttleConfig);
         if (status != StatusCode.OK) {
@@ -59,7 +59,7 @@ public class SwerveModuleKraken extends SwerveModule {
                                 .withNeutralMode(NeutralModeValue.Coast);
         var rotorFeedbeackConfig = new FeedbackConfigs()
                                         .withSensorToMechanismRatio(1/SwerveConstants.kRotorPositionConversionFactor);
-        rotorMotor = new TalonFX(rotorID,"DRIVETRAIN");
+        rotorMotor = new TalonFX(rotorID, SwerveConstants.kDrivetrainCANBus);
         status = rotorMotor.getConfigurator().apply(rotorConfig);
         if (status != StatusCode.OK) {
             DriverStation.reportWarning(mLocation + " Rotor Config Error: " + status, false);

@@ -202,8 +202,9 @@ public final class Constants {
   // ===== Intake 手臂 (IntakeArm) 常數 =====
   public static final class IntakeArmConstants {
     // ── 硬體 CAN ID ──
-    public static final int kLeaderMotorID = 3;
-    public static final int kFollowerMotorID = 4;
+    // Tuner X: right_intake_hand = 32, left_intake_hand = 33
+    public static final int kLeaderMotorID = 32;
+    public static final int kFollowerMotorID = 33;
 
     // ── 機構參數 ──
     public static final double kGearRatio = 20.0;
@@ -260,11 +261,11 @@ public final class Constants {
     public static final boolean kShoulderRightMotorInverted = false;
   }
 
-  CANBus canbus = new CANBus("DRIVETRAIN");
-
-
   // Swerve constants
   public static final class SwerveConstants {
+    /** DRIVETRAIN CAN bus 物件（Phoenix 6 v26+ 要求使用 CANBus 而非 String） */
+    public static final CANBus kDrivetrainCANBus = new CANBus("DRIVETRAIN");
+
     public static final int kPigeonID = 0;
 
     // Rotor IDs

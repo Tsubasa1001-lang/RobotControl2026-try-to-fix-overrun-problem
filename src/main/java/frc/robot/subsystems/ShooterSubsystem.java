@@ -1,7 +1,6 @@
 package frc.robot.subsystems;
 
 import java.util.Map;
-import java.util.function.DoubleSupplier;
 
 import com.ctre.phoenix6.configs.Slot0Configs;
 import com.ctre.phoenix6.configs.TalonFXConfiguration;
@@ -11,7 +10,6 @@ import com.ctre.phoenix6.hardware.TalonFX;
 import com.ctre.phoenix6.signals.NeutralModeValue;
 import com.ctre.phoenix6.StatusSignal;
 
-import edu.wpi.first.math.MathUtil;
 import edu.wpi.first.networktables.GenericEntry;
 
 import edu.wpi.first.units.measure.AngularVelocity;
@@ -155,38 +153,16 @@ public class ShooterSubsystem extends SubsystemBase {
     }
 
     /**
-     * 建立一個手動控制 Shooter 的 Command
-     * 這是最安全的寫法，因為當 Command 結束(手指放開)時，會自動呼叫 stop()
-     * 
-     * @param triggerInput 來自手把板機的輸入 (0.0 到 1.0)
+     * 建立一個固定轉速射擊的 Command（一鍵達速模式）。
+     * 按住按鈕期間持續以指定 RPS 運轉，放開後自動停止。
+     *
+     * @param targetRps 目標轉速 (rotations per second)
      * @return 控制 Shooter 的 Command
      */
-    public Command sys_manualShoot(int TargetRPS) {
-        // 使用 runEnd: 一直執行 execute 裡的程式，直到被打斷或放開後執行 end 裡的 stop
+    public Command sys_manualShoot(double targetRps) {
         return this.runEnd(
-            () -> {
-                // 1. 讀取板機數值
-                // double rawValue = triggerInput.getAsDouble();
-
-                // 2. 套用死區 (Deadband)
-                // 如果 rawValue 小於 0.05，就回傳 0，否則回傳 rawValue
-                // double adjustedValue = MathUtil.applyDeadband(rawValue, TRIGGER_DEADBAND);
-
-                // 3. 計算目標速度
-                // 將 0.0~1.0 的數值 映射到 0 ~ Target_RPS
-                // double targetRps = adjustedValue * Target_RPS;
-
-                // 4. 執行
-                setVelocity(TargetRPS);
-
-                // 顯示目前目標與實際速度在 Dashboard 方便除錯
-                // SmartDashboard.putNumber("Shooter/Target RPS", TargetRPS);
-            },
-            () -> {
-                // Command 結束時強制停止馬達
-                stop();
-                // SmartDashboard.putNumber("Shooter/Target RPS", 0);
-            }
+            () -> setVelocity(targetRps),
+            () -> stop()
         );
     }
 

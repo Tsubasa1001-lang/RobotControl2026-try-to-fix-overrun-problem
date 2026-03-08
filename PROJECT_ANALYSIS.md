@@ -520,7 +520,5 @@ src/main/java/frc/robot/
     ├── IntakeRollerSubsystem.java # 雙馬達 Intake 滾輪
     ├── IntakeArmSubsystem.java  # 雙馬達 Intake 手臂（未啟用）
     ├── LightPollution.java      # LED 燈條
-    ├── AutoAim.java             # 舊版自動瞄準（已被 AutoAimAndShoot 取代）
-    ├── DriveSubsystem.java      # 已清空（AutoBuilder 移至 RobotContainer）
     └── RoboArm.java             # 機械臂（未使用）
 ```

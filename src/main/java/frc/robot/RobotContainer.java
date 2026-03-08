@@ -9,8 +9,6 @@ import frc.robot.Constants.AutoAimConstants;
 import frc.robot.commands.Drive2Tag;
 import frc.robot.commands.ManualDrive;
 import frc.robot.commands.AutoAimAndShoot;
-// import frc.robot.subsystems.AutoAim;
-// import frc.robot.subsystems.DriveSubsystem; // 已清空，不再使用
 import frc.robot.subsystems.IntakeArmSubsystem;
 import frc.robot.subsystems.IntakeRollerSubsystem;
 import frc.robot.subsystems.Swerve;
@@ -58,7 +56,6 @@ public class RobotContainer {
     new CommandXboxController(OperatorConstants.kSwerveControllerPort);
 
     private final ManualDrive manualDriveCommand = new ManualDrive(swerve, driverController);
-    // DriveSubsystem 已清空（AutoBuilder 統一在 RobotContainer），不再需要實例化
     private final SendableChooser<Command> autoChooser;
 
     // ═══════════════ Shuffleboard ═══════════════

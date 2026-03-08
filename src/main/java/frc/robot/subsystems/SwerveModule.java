@@ -57,7 +57,7 @@ public abstract class SwerveModule {
         initMotors(throttleID, rotorID, throttleInverted, rotorInverted);
         initPID();
 
-        mRotorEncoder = new CANcoder(rotorEncoderID,"DRIVETRAIN");
+        mRotorEncoder = new CANcoder(rotorEncoderID, SwerveConstants.kDrivetrainCANBus);
          // Configure absolute encoder
 
         // 快取 CANcoder Signal 並設定更新頻率（里程計關鍵路徑）
