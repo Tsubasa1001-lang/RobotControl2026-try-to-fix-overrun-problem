@@ -92,6 +92,15 @@ public class Swerve extends SubsystemBase {
         isUseLimelight = true;
         initFields();
 
+        // 設定 Limelight 安裝位置（從 Constants 統一管理）
+        LimelightHelpers.setCameraPose_RobotSpace(limelightName,
+            Constants.LimelightConstants.kForwardMeters,
+            Constants.LimelightConstants.kSideMeters,
+            Constants.LimelightConstants.kUpMeters,
+            Constants.LimelightConstants.kRollDegrees,
+            Constants.LimelightConstants.kPitchDegrees,
+            Constants.LimelightConstants.kYawDegrees);
+
         // 模擬環境：將初始位置設在場地中央，避免因紅方速度反轉跑出場地邊界看不見
         Pose2d initialPose;
         if (RobotBase.isSimulation()) {
@@ -242,29 +251,30 @@ public class Swerve extends SubsystemBase {
                     // ── 過濾不可靠的視覺資料 ──
                     if (mt2.tagCount == 1) {
                         // 只看到 1 個 Tag：檢查可靠度
-                        if (mt2.rawFiducials[0].ambiguity > 0.7) doRejectUpdate = true;
-                        if (mt2.rawFiducials[0].distToCamera > 4.0) doRejectUpdate = true;
+                        if (mt2.rawFiducials[0].ambiguity > Constants.LimelightConstants.kMaxAmbiguity) doRejectUpdate = true;
+                        if (mt2.rawFiducials[0].distToCamera > Constants.LimelightConstants.kMaxTagDistMeters) doRejectUpdate = true;
                     }
                     // 多個 Tag（tagCount >= 2）：交叉定位精度高，跳過 ambiguity/distance 檢查
 
                     // 機器人高速旋轉時影像模糊，不融合
-                    if (Math.abs(getGyroRateDps()) > 720) doRejectUpdate = true;
+                    if (Math.abs(getGyroRateDps()) > Constants.LimelightConstants.kMaxGyroRateDps) doRejectUpdate = true;
                 }
 
                 if (!doRejectUpdate) {
                     // ── 動態信任度：看到越多 Tag → 越信任 Limelight ──
                     double xyStdDev;
                     if (mt2.tagCount >= 2) {
-                        xyStdDev = 0.3; // 多 Tag 交叉定位，高信任
+                        xyStdDev = Constants.LimelightConstants.kMultiTagXYStdDev;
                     } else {
                         // 單 Tag：根據距離動態調整（越遠越不信任）
                         double dist = mt2.rawFiducials[0].distToCamera;
-                        xyStdDev = 0.5 + (dist * 0.15); // 1m→0.65, 3m→0.95
+                        xyStdDev = Constants.LimelightConstants.kSingleTagBaseStdDev
+                                 + (dist * Constants.LimelightConstants.kSingleTagDistScale);
                     }
 
-                    // 角度永遠不融合（999999），完全信任 IMU
+                    // 角度永遠不融合，完全信任 IMU
                     poseEstimator.setVisionMeasurementStdDevs(
-                        VecBuilder.fill(xyStdDev, xyStdDev, 999999));
+                        VecBuilder.fill(xyStdDev, xyStdDev, Constants.LimelightConstants.kAngleStdDev));
                     poseEstimator.addVisionMeasurement(mt2.pose, mt2.timestampSeconds);
                 }
 

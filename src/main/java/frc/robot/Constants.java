@@ -27,6 +27,29 @@ import edu.wpi.first.math.util.Units;
 public final class Constants {
   public static final String kLimelightName = "limelight";
 
+  // ===== Limelight 設定 =====
+  public static final class LimelightConstants {
+    // ── 安裝位置（機器人座標系）──
+    // ⚠️ 請用捲尺實際量測後修改！
+    public static final double kForwardMeters = 0.30;   // 鏡頭距機器人中心往前 (m)
+    public static final double kSideMeters    = 0.00;   // 鏡頭距機器人中心往左 (m)，右為負
+    public static final double kUpMeters      = 0.50;   // 鏡頭距地面高度 (m)
+    public static final double kRollDegrees   = 0.0;    // 繞前後軸旋轉 (deg)
+    public static final double kPitchDegrees  = 25.0;   // 鏡頭仰角 (deg)，向上為正
+    public static final double kYawDegrees    = 0.0;    // 鏡頭水平旋轉 (deg)，向左為正
+
+    // ── 視覺融合過濾閾值 ──
+    public static final double kMaxAmbiguity       = 0.7;    // 單 Tag ambiguity 超過此值就丟棄
+    public static final double kMaxTagDistMeters   = 4.0;    // 單 Tag 距離超過此值就丟棄 (m)
+    public static final double kMaxGyroRateDps     = 720.0;  // 旋轉速度超過此值時不融合 (deg/s)
+
+    // ── 視覺融合信任度（標準差）──
+    public static final double kMultiTagXYStdDev   = 0.3;    // 多 Tag 交叉定位 XY 標準差 (m)
+    public static final double kSingleTagBaseStdDev = 0.5;   // 單 Tag 基礎 XY 標準差 (m)
+    public static final double kSingleTagDistScale = 0.15;   // 單 Tag 距離比例係數（越遠越不信）
+    public static final double kAngleStdDev        = 999999; // 角度不融合，完全信任 IMU
+  }
+
   // ===== 遙測節流 =====
   // Dashboard 更新頻率 = 50Hz / kTelemetryDivider
   // 5 → 每 5 個週期更新一次 = 10Hz (100ms)，人眼足夠
