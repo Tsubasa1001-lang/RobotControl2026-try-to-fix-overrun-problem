@@ -10,6 +10,7 @@ import com.ctre.phoenix6.hardware.TalonFX;
 import com.ctre.phoenix6.signals.NeutralModeValue;
 import com.ctre.phoenix6.StatusSignal;
 
+import edu.wpi.first.math.MathUtil;
 import edu.wpi.first.networktables.GenericEntry;
 
 import edu.wpi.first.units.measure.AngularVelocity;
@@ -185,33 +186,31 @@ public class ShooterSubsystem extends SubsystemBase {
     }
 
     /**
-     * 根據距離線性內插查表取得目標 RPS
-     * 使用 AutoAimConstants.kDistanceToRpsTable 進行查表
+     * 根據距離計算目標 RPS（2 次多項式曲線擬合）。
+     * <p>
+     * 公式: {@code RPS = kRpsA * d² + kRpsB * d + kRpsC}
+     * <p>
+     * 超出測量範圍 (1m~5m) 時 clamp 到邊界值，避免外推爆掉。
+     *
      * @param distance 到目標的距離 (m)
      * @return 目標射手 RPS
      */
     public static double interpolateRps(double distance) {
-        double[][] table = AutoAimConstants.kDistanceToRpsTable;
-
-        // 距離小於表中最小值 → 回傳最小 RPS
-        if (distance <= table[0][0]) {
-            return table[0][1];
+        // 邊界安全：超出測量範圍直接回傳限制值
+        if (distance <= AutoAimConstants.kRpsMinDistance) {
+            return AutoAimConstants.kRpsMin;
         }
-        // 距離大於表中最大值 → 回傳最大 RPS
-        if (distance >= table[table.length - 1][0]) {
-            return table[table.length - 1][1];
+        if (distance >= AutoAimConstants.kRpsMaxDistance) {
+            return AutoAimConstants.kRpsMax;
         }
 
-        // 線性內插
-        for (int i = 0; i < table.length - 1; i++) {
-            if (distance >= table[i][0] && distance <= table[i + 1][0]) {
-                double ratio = (distance - table[i][0]) / (table[i + 1][0] - table[i][0]);
-                return table[i][1] + ratio * (table[i + 1][1] - table[i][1]);
-            }
-        }
+        // 2 次多項式: RPS = A*d² + B*d + C
+        double rps = AutoAimConstants.kRpsA * distance * distance
+                   + AutoAimConstants.kRpsB * distance
+                   + AutoAimConstants.kRpsC;
 
-        // 理論上不會到這裡
-        return table[table.length - 1][1];
+        // 安全 clamp，防止曲線在邊界附近超出合理範圍
+        return MathUtil.clamp(rps, AutoAimConstants.kRpsMin, AutoAimConstants.kRpsMax);
     }
 
     @Override

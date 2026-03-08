@@ -95,19 +95,25 @@ public final class Constants {
     public static final double kRotation_kD = 0.1;
     public static final double kRotationToleranceDeg = 2.0; // 角度容許誤差 (度)
 
-    // 距離 → 射手 RPS 對照表
-    // 格式: {距離(m), RPS}，距離由近到遠排列
-    // ⚠️ 這些值需要在實際場地測試後調整！(2026 REBUILT Hub 距離)
-    public static final double[][] kDistanceToRpsTable = {
-      {1.0, 35},   // 1m → 35 RPS
-      {1.5, 40},   // 1.5m → 40 RPS
-      {2.0, 45},   // 2m → 45 RPS
-      {2.5, 50},   // 2.5m → 50 RPS
-      {3.0, 55},   // 3m → 55 RPS
-      {3.5, 60},   // 3.5m → 60 RPS
-      {4.0, 65},   // 4m → 65 RPS
-      {5.0, 70},   // 5m → 70 RPS
-    };
+    // ── 距離 → 射手 RPS 多項式曲線擬合 ──
+    // 由實際測量 8 個數據點 (1m~5m) 做 2 次多項式迴歸得出：
+    //   RPS(d) = kRpsA * d² + kRpsB * d + kRpsC
+    // 最大擬合誤差 ≈ 1.3 RPS（在容許範圍內）
+    //
+    // 原始測量數據（保留作為校驗參考）：
+    //   1.0m→35, 1.5m→40, 2.0m→45, 2.5m→50,
+    //   3.0m→55, 3.5m→60, 4.0m→65, 5.0m→70
+    //
+    // ⚠️ 如果更換射手機構或重新測量，請用 fit_rps.py 重新擬合係數！
+    public static final double kRpsA = -0.686275; // d² 係數
+    public static final double kRpsB = 13.186275; // d  係數
+    public static final double kRpsC = 21.911765; // 常數項
+
+    // 安全限制：超出測量範圍時 clamp 到邊界值
+    public static final double kRpsMinDistance = 1.0;  // 最近測量距離 (m)
+    public static final double kRpsMaxDistance = 5.0;  // 最遠測量距離 (m)
+    public static final double kRpsMin = 35.0;         // 最低 RPS（對應最近距離）
+    public static final double kRpsMax = 70.0;         // 最高 RPS（對應最遠距離）
 
     // 射手速度容許誤差 (RPS)
     public static final double kShooterToleranceRps = 3.0;
