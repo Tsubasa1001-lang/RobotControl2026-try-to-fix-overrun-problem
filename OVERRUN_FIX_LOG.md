@@ -3,7 +3,7 @@
 **修復日期**：2026-02-26  
 **專案**：RobotControl2026  
 **問題**：機器人執行動作時出現延遲 / WPILib Loop Overrun 警告  
-**最後更新**：2026-02-26
+**最後更新**：2026-03-08
 
 ---
 
@@ -13,7 +13,7 @@ FRC 機器人使用 `TimedRobot` 架構，預設每 **20ms** 執行一次 `robot
 當單次迴圈執行時間超過 20ms，Driver Station 就會顯示 **"Loop overrun"** 警告，  
 導致控制訊號延遲、動作卡頓，甚至影響比賽安全。
 
-本次共修復 **5 個問題**，涵蓋 5 個檔案。
+本次共修復 **5 個初始問題 + 10 個後續優化**，涵蓋全部主要檔案。
 
 ---
 
@@ -506,3 +506,298 @@ setVelocity(INTAKE_TARGET_RPS); // 閉環控制，遇阻力自動補償電壓
 | 12 | `IntakeRollerSubsystem.java` | DutyCycleOut → VelocityVoltage 閉環控制 |
 | 13 | `Robot.java` | Loop 計時監控 |
 | 14 | `build.gradle` | includeDesktopSupport = true |
+
+---
+
+### 優化 12 — 遙測節流 (Telemetry Throttle)
+
+**問題**：所有 NetworkTables `putNumber()` / `putString()` 每 20ms 執行一次，佔用迴圈時間與頻寬
+
+| 項目 | 內容 |
+|------|------|
+| **影響檔案** | `Constants.java`, `Robot.java`, `Swerve.java`, `ManualDrive.java`, `AutoAimAndShoot.java`, `ShooterSubsystem.java`, `IntakeRollerSubsystem.java`, `IntakeArmSubsystem.java` |
+| **修復類型** | 性能優化 |
+
+**修改前**：
+```java
+// 每個 periodic() 都會執行 putNumber()，50Hz × 所有子系統 ≈ 350 次/秒
+@Override
+public void periodic() {
+    SmartDashboard.putNumber("Shooter/Velocity", getVelocityRps());
+    SmartDashboard.putNumber("Shooter/Voltage", getMotorVoltage());
+    // ... 每個值都是 50Hz
+}
+```
+
+**修改後**：
+```java
+// Constants.java
+public static final int kTelemetryDivider = 5; // 50Hz / 5 = 10Hz
+
+// ShooterSubsystem.java (範例)
+private int telemetryCounter = 0;
+@Override
+public void periodic() {
+    if (++telemetryCounter >= Constants.kTelemetryDivider) {
+        telemetryCounter = 0;
+        SmartDashboard.putNumber("Shooter/Velocity", velocitySignal.refresh().getValueAsDouble());
+        SmartDashboard.putNumber("Shooter/Voltage", voltageSignal.refresh().getValueAsDouble());
+        // ...
+    }
+}
+```
+
+**效果**：
+| 指標 | 修改前 | 修改後 | 降幅 |
+|------|--------|--------|------|
+| NT 寫入頻率 | 50Hz | 10Hz | ↓80% |
+| 預估 NT 寫入/秒 | ~350 | ~70 | ↓80% |
+
+**為什麼要這樣做**：
+
+`SmartDashboard.putNumber()` 每次呼叫都要進行序列化、CRC 計算、並透過 NetworkTables 4.0 的 pubsub 發佈。  
+50Hz 對於人類觀察儀表板根本用不到（眼睛分辨不到 >10fps），卻佔用了大量的 NT server 處理時間。  
+10Hz 已經足夠所有調試需求，且大幅減少 GC 壓力和序列化開銷。
+
+特別注意 `Swerve.java` 的實作方式：用一個 `telemetryThisCycle` boolean flag，  
+在 `periodic()` 開頭設定，然後在 `runSetStates()` 和 `setModuleStates()` 中共用同一個 flag，  
+確保一次「遙測 cycle」中所有值的時間戳一致。
+
+---
+
+### 優化 13 — Phoenix 6 StatusSignal 快取 & 頻率控制
+
+**問題**：每次呼叫 `motor.getVelocity()` 都會建立新的 StatusSignal 物件，且預設 250Hz 更新
+
+| 項目 | 內容 |
+|------|------|
+| **影響檔案** | `Swerve.java`, `SwerveModuleKraken.java`, `SwerveModule.java`, `ShooterSubsystem.java`, `IntakeRollerSubsystem.java`, `IntakeArmSubsystem.java` |
+| **修復類型** | CAN Bus 優化 |
+
+**修改前**：
+```java
+// 每次呼叫都建立新的 StatusSignal wrapper，且所有 signal 預設 250Hz
+public double getVelocityRps() {
+    return leaderMotor.getVelocity().getValueAsDouble(); // 臨時物件 + 250Hz polling
+}
+```
+
+**修改後**：
+```java
+// Phoenix 6 v26 推薦方式：使用 units-aware 型別
+private final StatusSignal<AngularVelocity> velocitySignal;
+private final StatusSignal<Voltage> voltageSignal;
+private final StatusSignal<Current> currentSignal;
+
+// 建構子中：快取 + 設定頻率 + 最佳化
+velocitySignal = leaderMotor.getVelocity();
+velocitySignal.setUpdateFrequency(50);     // 閉環回饋需 50Hz
+voltageSignal = leaderMotor.getMotorVoltage();
+voltageSignal.setUpdateFrequency(10);       // 遙測用，10Hz 足夠
+currentSignal = leaderMotor.getStatorCurrent();
+currentSignal.setUpdateFrequency(10);
+leaderMotor.optimizeBusUtilization();       // 未使用的 signal 自動降頻
+
+// 使用時
+public double getVelocityRps() {
+    return velocitySignal.refresh().getValueAsDouble(); // 無新物件建立
+}
+```
+
+**效果**：
+
+| 元件 | Signal 數量 | 修改前頻率 | 修改後頻率 | 節省 frames/s |
+|------|------------|-----------|-----------|--------------|
+| Pigeon2 | 2 | 250Hz | 100/50Hz | ~350 |
+| 4× SwerveModuleKraken | 8 | 250Hz | 100Hz | ~600 |
+| 4× SwerveModule/CANcoder | 4 | 250Hz | 100Hz | ~600 |
+| ShooterSubsystem | 3 | 250Hz | 50/10/10Hz | ~680 |
+| IntakeRollerSubsystem | 3 | 250Hz | 50/10/10Hz | ~680 |
+| IntakeArmSubsystem | 3 | 250Hz | 50/10/10Hz | ~680 |
+| **合計** | **23** | | | **~3590** |
+
+加上 `optimizeBusUtilization()` 將每台設備的 ~10 個未使用 signal 從 250Hz 降至 4Hz，  
+額外節省 ~2000 frames/s。**總節省約 80% CAN 頻寬**。
+
+**為什麼要這樣做**：
+
+CAN Bus 頻寬有限（1Mbps），且 Phoenix 6 預設每個 `StatusSignal` 都是 250Hz polling。  
+一台 TalonFX 有 ~12 個 signal（位置、速度、電壓、電流、溫度...），4 台 Swerve 就是 12000 frames/s。  
+加上 Pigeon2、Shooter、Intake 的 signal，輕易超過 CAN Bus 理論上限。
+
+快取 `StatusSignal<T>` 欄位避免了每次呼叫建立臨時物件（降低 GC 壓力），  
+`setUpdateFrequency()` 只給需要的 signal 合理的更新頻率，  
+`optimizeBusUtilization()` 自動處理其餘 signal。
+
+---
+
+### 優化 14 — 聯盟對稱重構 (Alliance Symmetry)
+
+**問題**：紅/藍方座標分別定義，AutoAimAndShoot 和 RobotContainer 中大量 if/else 分支
+
+| 項目 | 內容 |
+|------|------|
+| **影響檔案** | `Constants.java`, `AutoAimAndShoot.java`, `RobotContainer.java` |
+| **修復類型** | 架構重構 |
+
+**修改前**：
+```java
+// Constants.java — 重複定義
+public static final double kBlueHubX = 4.626;
+public static final double kBlueHubY = 4.035;
+public static final double kRedHubX = 16.541 - 4.626;
+public static final double kRedHubY = 4.035;
+public static final double kBlueReturnAngleRad = Math.PI;
+public static final double kRedReturnAngleRad = 0;
+
+// AutoAimAndShoot.java — 大量分支
+if (isRed) {
+    if (robotX > kFieldMidX) {
+        targetAngle = Math.atan2(kRedHubY - robotY, kRedHubX - robotX);
+        targetRps = interpolateRps(distToRedHub);
+    } else {
+        targetAngle = kRedReturnAngleRad;
+        targetRps = kMidFieldReturnRps;
+    }
+} else {
+    if (robotX < kFieldMidX) {
+        targetAngle = Math.atan2(kBlueHubY - robotY, kBlueHubX - robotX);
+        targetRps = interpolateRps(distToBlueHub);
+    } else {
+        targetAngle = kBlueReturnAngleRad;
+        targetRps = kMidFieldReturnRps;
+    }
+}
+```
+
+**修改後**：
+```java
+// Constants.java — 單一來源 + helper 方法
+public static final double kHubX = 4.626;   // 藍方基準
+public static final double kHubY = 4.035;
+public static final double kReturnAngleRad = Math.PI;
+
+public static Translation2d getHubPosition(boolean isRed) {
+    return isRed ? new Translation2d(kFieldLength - kHubX, kHubY)
+                 : new Translation2d(kHubX, kHubY);
+}
+public static double getReturnAngleRad(boolean isRed) {
+    return isRed ? Math.PI - kReturnAngleRad : kReturnAngleRad;
+}
+public static boolean isInOwnZone(double robotX, boolean isRed) {
+    return isRed ? robotX > kFieldMidX : robotX < kFieldMidX;
+}
+
+// AutoAimAndShoot.java — 統一邏輯（無分支）
+Translation2d hub = AutoAimConstants.getHubPosition(isRed);
+if (AutoAimConstants.isInOwnZone(robotX, isRed)) {
+    targetAngle = Math.atan2(hub.getY() - robotY, hub.getX() - robotX);
+    targetRps = ShooterSubsystem.interpolateRps(distToHub);
+} else {
+    targetAngle = AutoAimConstants.getReturnAngleRad(isRed);
+    targetRps = kMidFieldReturnRps;
+}
+```
+
+**效果**：
+- 40 行 if/else → 15 行統一邏輯
+- 未來調 Hub 座標只需改一處，紅方自動鏡像推導
+- 消除「改藍忘紅」的風險
+
+---
+
+### 優化 15 — Follower 馬達修正（三項）
+
+**問題**：Follower 馬達存在三個不同層面的 bug
+
+| 項目 | 內容 |
+|------|------|
+| **影響檔案** | `TransportSubsystem.java`, `IntakeRollerSubsystem.java`, `IntakeArmSubsystem.java` |
+| **修復類型** | Bug 修復（馬達控制） |
+
+#### 15a — Transport：VelocityVoltage 請求物件共用
+
+```java
+// ❌ 修改前：兩顆馬達共用同一個 mutable 物件
+private final VelocityVoltage velocityRequest = new VelocityVoltage(0);
+public void setTransportVelocity(double shootRps, double transportRps) {
+    up_to_shoot.setControl(velocityRequest.withVelocity(shootRps));
+    // ↑ velocityRequest 的內部 Velocity 被改為 shootRps
+    transport.setControl(velocityRequest.withVelocity(transportRps));
+    // ↑ velocityRequest 的內部 Velocity 被改為 transportRps
+    // 但因為 CTRE 是非同步發送，up_to_shoot 可能拿到 transportRps
+}
+
+// ✅ 修改後：各自獨立物件
+private final VelocityVoltage upToShootRequest = new VelocityVoltage(0);
+private final VelocityVoltage transportRequest = new VelocityVoltage(0);
+public void setTransportVelocity(double shootRps, double transportRps) {
+    up_to_shoot.setControl(upToShootRequest.withVelocity(shootRps));
+    transport.setControl(transportRequest.withVelocity(transportRps));
+}
+```
+
+**為什麼要這樣做**：`VelocityVoltage.withVelocity()` 是 **mutable** 操作，  
+它修改 `this` 並返回 `this`。因此共用物件時第二次 `withVelocity()` 會覆蓋第一次設定。
+
+#### 15b — IntakeRoller：Follower 雙重反轉
+
+```java
+// ❌ 修改前：Inverted + Opposed = 雙重反轉 → 結果同向轉
+followerConfig.MotorOutput.Inverted = InvertedValue.Clockwise_Positive;
+followerMotor.setControl(new Follower(leaderID, MotorAlignmentValue.Opposed));
+// Opposed 已經自動反轉一次，Inverted 又反轉一次 → 互相抵消
+
+// ✅ 修改後：移除 Inverted 設定
+// followerConfig 不設定 Inverted（保持預設 CounterClockwise_Positive）
+followerMotor.setControl(new Follower(leaderID, MotorAlignmentValue.Opposed));
+// 只靠 Opposed 自動反轉
+```
+
+**為什麼要這樣做**：Phoenix 6 `Follower` 的 `Opposed` 參數已經處理了方向反轉。  
+再手動設定 `Inverted = Clockwise_Positive` 等於反轉了兩次，最終效果是兩顆馬達同向轉。  
+對 Intake 滾輪來說，同向轉意味著只有一側滾輪在吸球，另一側在推球。
+
+#### 15c — IntakeRoller & IntakeArm：Follower PID 更新無意義
+
+```java
+// ❌ 修改前：periodic() 中對 Follower 也更新 PID
+if (hasNewPIDValues) {
+    Slot0Configs newSlot0 = new Slot0Configs().withKV(kV).withKP(kP).withKI(kI).withKD(kD);
+    leaderMotor.getConfigurator().apply(newSlot0);
+    followerMotor.getConfigurator().apply(newSlot0);  // ← 浪費 CAN
+}
+
+// ✅ 修改後：只更新 Leader
+if (hasNewPIDValues) {
+    Slot0Configs newSlot0 = new Slot0Configs().withKV(kV).withKP(kP).withKI(kI).withKD(kD);
+    leaderMotor.getConfigurator().apply(newSlot0);
+    // Follower 鏡像 Leader 的輸出，不跑自己的閉環，PID 參數完全不使用
+}
+```
+
+**為什麼要這樣做**：Phoenix 6 的 `Follower` 控制模式下，馬達直接鏡像 Leader 的控制輸出，  
+不會運行自己的 PID 計算。對 Follower 寫入 `Slot0Configs` 完全無效，  
+卻每次觸發都會佔用一次 CAN `apply()` 操作（多個 CAN frame + 等待 ACK）。
+
+---
+
+## 完整修改檔案清單
+
+| # | 檔案 | 修改類型 |
+|---|------|----------|
+| 1 | `Swerve.java` | Overrun 修復 + SlewRateLimiter + IMU 同步 + Limelight 校正 + sim + StatusSignal 快取 + 遙測節流 |
+| 2 | `SwerveModule.java` | CAN 讀取快取 + StatusSignal 快取 |
+| 3 | `SwerveModuleKraken.java` | kMaxPhysicalSpeedMps + sim 物理 + 錯誤處理 + StatusSignal 快取 |
+| 4 | `LightPollution.java` | LED 更新降頻 |
+| 5 | `DriveSubsystem.java` | 移除重複 AutoBuilder |
+| 6 | `RobotContainer.java` | Command 工廠方法 + AutoAimAndShoot 綁定 + teleopInit 校正 + 聯盟對稱 |
+| 7 | `Constants.java` | kMaxPhysicalSpeedMps + AutoAimConstants + 聯盟對稱 helper + kTelemetryDivider |
+| 8 | `ManualDrive.java` | 速度乘數改用 kMaxPhysicalSpeedMps + 遙測節流 |
+| 9 | `ShooterSubsystem.java` | setTargetVelocity / interpolateRps + StatusSignal 快取 + 遙測節流 |
+| 10 | `TransportSubsystem.java` | runTransport / stopTransport + VelocityVoltage 分離 |
+| 11 | `AutoAimAndShoot.java` | 🆕 自動瞄準射擊 Command + 聯盟對稱 + 遙測節流 |
+| 12 | `IntakeRollerSubsystem.java` | VelocityVoltage 閉環 + Follower 修正 + StatusSignal 快取 + 遙測節流 |
+| 13 | `IntakeArmSubsystem.java` | Follower PID 修正 + StatusSignal 快取 + 遙測節流 |
+| 14 | `Robot.java` | Loop 計時監控 + 遙測節流 |
+| 15 | `build.gradle` | includeDesktopSupport = true |
