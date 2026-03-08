@@ -9,7 +9,7 @@ import frc.robot.Constants.AutoAimConstants;
 import frc.robot.commands.Drive2Tag;
 import frc.robot.commands.ManualDrive;
 import frc.robot.commands.AutoAimAndShoot;
-import frc.robot.commands.AutoAimShootAuto;
+import frc.robot.commands.ShootOnTheMove;
 import frc.robot.subsystems.IntakeArmSubsystem;
 import frc.robot.subsystems.IntakeRollerSubsystem;
 import frc.robot.subsystems.Swerve;
@@ -68,43 +68,6 @@ public class RobotContainer {
     private final TransportSubsystem transport = new TransportSubsystem();
 
     private Command autoCommand;
-
-    // ── 距離自適應輔助方法 ──
-    // 根據機器人目前位置計算到 Hub 的距離，查表取得目標 RPS
-    private double getAdaptiveRps() {
-        var robotPos = swerve.getPose().getTranslation();
-        Translation2d hubPos = AutoAimConstants.getHubPosition(swerve.isAllianceRed());
-        double distance = hubPos.minus(robotPos).getNorm();
-        return ShooterSubsystem.interpolateRps(distance);
-    }
-
-    // ── 工廠方法：自適應自主射擊 ──
-    // PathPlanner Auto 用：即時計算距離 → 動態調整 RPS → 達速後送球
-    private Command createAutoShootCommand() {
-        return Commands.parallel(
-            // 持續依距離設定射手速度
-            shooterSubsystem.run(() -> shooterSubsystem.setTargetVelocity(getAdaptiveRps()))
-                .finallyDo(() -> shooterSubsystem.stopShooter()),
-            Commands.sequence(
-                Commands.waitUntil(() -> shooterSubsystem.isAtSpeed(getAdaptiveRps(), AutoAimConstants.kShooterToleranceRps)).withTimeout(2.0),
-                transport.sys_runTransport().withTimeout(4.0)
-            )
-        ).withTimeout(4.0);
-    }
-
-    private Command createAutoIntakeCommand() {
-        return Commands.parallel(
-            intakeRoller.sys_intakeWithTrigger(),
-            transport.sys_slowRunTransport()
-        ).withTimeout(2.5);
-    }
-
-    private Command createShootCommand() {
-        return Commands.sequence(
-            Commands.waitUntil(() -> shooterSubsystem.isAtSpeed(getAdaptiveRps(), AutoAimConstants.kShooterToleranceRps)),
-            transport.sys_runTransport()
-        );
-    }
     
     public RobotContainer() {
         SignalLogger.enableAutoLogging(false);
@@ -112,29 +75,23 @@ public class RobotContainer {
         // ═══════════════ Shuffleboard 初始化 ═══════════════
         swerve.setupShuffleboardTab(shuffleboardManager.getSwerveTab());
         
-    
-        NamedCommands.registerCommand("transport wait shoot", createShootCommand());
-        // "shoot work"：僅啟動射手（依距離自適應 RPS），不含送球
-        NamedCommands.registerCommand("shoot work",
-            shooterSubsystem.run(() -> shooterSubsystem.setTargetVelocity(getAdaptiveRps()))
-                .finallyDo(() -> shooterSubsystem.stopShooter()));
-
-        NamedCommands.registerCommand("Auto Shoot", createAutoShootCommand());
-        // "Auto Aim Shoot"：自動旋轉對齊 Hub + 依距離調 RPS + 達速送球 + 射完自動結束
-        // 與手操 AutoAimAndShoot 同樣邏輯，但佔用 swerve 做原地旋轉
+        // ═══════════════ PathPlanner NamedCommands ═══════════════
+        // "Auto Aim Shoot"：邊走邊瞄準射擊
+        //   使用 PPHolonomicDriveController.setRotationTargetOverride() 覆寫旋轉
+        //   PathPlanner 繼續控制 XY 平移，此 Command 接管旋轉 + 射手 + 送球
+        //   可與路徑平行執行（邊跑邊射）或路徑結束後執行（停下射擊）
         NamedCommands.registerCommand("Auto Aim Shoot",
-            new AutoAimShootAuto(swerve, shooterSubsystem, transport));
-        // "Far Auto Shoot" 不再需要，統一用自適應 "Auto Shoot"
-        NamedCommands.registerCommand("Far Auto Shoot", createAutoShootCommand());
-        NamedCommands.registerCommand("Auto Intake", createAutoIntakeCommand());
-    
+            new ShootOnTheMove(swerve, shooterSubsystem, transport));
+
+        // "Start Intake"：開始吸球（與手操左板機相同）
         NamedCommands.registerCommand("Start Intake", 
             intakeRoller.sys_intakeWithTrigger()
         );
-    
+
+        // "Stop Intake"：停止吸球
         NamedCommands.registerCommand("Stop Intake", 
             intakeRoller.runOnce(() -> intakeRoller.stop())
-            );
+        );
             
             
             try {

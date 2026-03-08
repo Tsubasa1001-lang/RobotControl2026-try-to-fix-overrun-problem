@@ -116,7 +116,7 @@ public final class Constants {
     public static final double kRotation_kP = 5.0;
     public static final double kRotation_kI = 0.0;
     public static final double kRotation_kD = 0.1;
-    public static final double kRotationToleranceDeg = 2.0; // 角度容許誤差 (度)
+    public static final double kRotationToleranceDeg = 10.0; // 角度容許誤差 (度)
 
     // ── 距離 → 射手 RPS 多項式曲線擬合 ──
     // 由實際測量 8 個數據點 (1m~5m) 做 2 次多項式迴歸得出：
@@ -139,7 +139,7 @@ public final class Constants {
     public static final double kRpsMax = 70.0;         // 最高 RPS（對應最遠距離）
 
     // 射手速度容許誤差 (RPS)
-    public static final double kShooterToleranceRps = 3.0;
+    public static final double kShooterToleranceRps = 8.0;
 
     // 中立區回傳球固定射手 RPS
     // 因為距離遠且不需要精準進 Hub，用固定高速射回即可
