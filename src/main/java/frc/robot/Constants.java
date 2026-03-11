@@ -157,6 +157,15 @@ public final class Constants {
     // 一旦開始送球，放寬到 kFeedingHysteresisDeg，避免移動中微小偏差中斷連射
     public static final double kFeedingHysteresisDeg = 5.0;
 
+    // ── 慣性補償 (Lead Compensation) ──
+    // 機器人移動中射擊時，球飛行到 Hub 需要時間，
+    // 這段時間內機器人會繼續移動，所以需要「提前瞄準」。
+    // kLeadTimeSec = 預估球飛行到 Hub 的時間 (s)
+    // 計算方式：predictedPos = currentPos + fieldVelocity × leadTime
+    //           然後用 predictedPos 計算瞄準角度
+    // ⚠️ 建議在 0.1~0.4s 之間調整，可透過 Shuffleboard TunableNumber 即時調參！
+    public static final double kLeadTimeSec = 0.2;
+
     // 射擊模式下底盤平移速度倍率
     // 降低平移速度避免因慣性導致球射偏（1.0 = 全速，0.3 = 30% 速度）
     public static final double kShootingModeSpeedMultiplier = 0.3;

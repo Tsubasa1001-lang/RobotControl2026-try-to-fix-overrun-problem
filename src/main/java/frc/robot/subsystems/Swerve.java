@@ -587,6 +587,23 @@ public class Swerve extends SubsystemBase {
     }
 
     /**
+     * 取得場地座標系的底盤速度（用於慣性補償等需要場地座標的計算）
+     * @return 場地座標系的 ChassisSpeeds (vx/vy 為場地座標系方向)
+     */
+    public ChassisSpeeds getFieldRelativeChassisSpeeds() {
+        ChassisSpeeds robotRelative = getChassisSpeeds();
+        Rotation2d heading = getPose().getRotation();
+        // 將機器人座標系的 vx/vy 旋轉到場地座標系
+        return new ChassisSpeeds(
+            robotRelative.vxMetersPerSecond * heading.getCos() 
+                - robotRelative.vyMetersPerSecond * heading.getSin(),
+            robotRelative.vxMetersPerSecond * heading.getSin() 
+                + robotRelative.vyMetersPerSecond * heading.getCos(),
+            robotRelative.omegaRadiansPerSecond
+        );
+    }
+
+    /**
      * 緊急重設 IMU（綁定在按鈕 8）。
      * 自動偵測聯盟色：藍方 → 0°，紅方 → 180°（WPILib 藍方原點座標系）。
      */

@@ -4,6 +4,7 @@ import edu.wpi.first.math.MathUtil;
 import edu.wpi.first.math.controller.PIDController;
 import edu.wpi.first.math.geometry.Pose2d;
 import edu.wpi.first.math.geometry.Translation2d;
+import edu.wpi.first.math.kinematics.ChassisSpeeds;
 import edu.wpi.first.networktables.GenericEntry;
 import edu.wpi.first.wpilibj.shuffleboard.BuiltInWidgets;
 import edu.wpi.first.wpilibj.shuffleboard.ShuffleboardTab;
@@ -42,6 +43,7 @@ public class AutoAimAndShoot extends Command {
     private final TunableNumber tunableRotKP;
     private final TunableNumber tunableRotKI;
     private final TunableNumber tunableRotKD;
+    private final TunableNumber tunableLeadTime;
 
     // ── Shuffleboard 遙測 ──
     private GenericEntry distanceEntry, targetAngleEntry, currentAngleEntry;
@@ -71,6 +73,7 @@ public class AutoAimAndShoot extends Command {
             tunableRotKP = new TunableNumber(tab, "Rotation kP", AutoAimConstants.kRotation_kP);
             tunableRotKI = new TunableNumber(tab, "Rotation kI", AutoAimConstants.kRotation_kI);
             tunableRotKD = new TunableNumber(tab, "Rotation kD", AutoAimConstants.kRotation_kD);
+            tunableLeadTime = new TunableNumber(tab, "Lead Time (s)", AutoAimConstants.kLeadTimeSec);
 
             distanceEntry    = tab.add("Distance", 0).withWidget(BuiltInWidgets.kTextView).withSize(2, 1).withPosition(0, 2).getEntry();
             targetAngleEntry = tab.add("Target Angle", 0).withWidget(BuiltInWidgets.kTextView).withSize(2, 1).withPosition(2, 2).getEntry();
@@ -86,6 +89,7 @@ public class AutoAimAndShoot extends Command {
             tunableRotKP = new TunableNumber("AutoAim/Rotation kP", AutoAimConstants.kRotation_kP);
             tunableRotKI = new TunableNumber("AutoAim/Rotation kI", AutoAimConstants.kRotation_kI);
             tunableRotKD = new TunableNumber("AutoAim/Rotation kD", AutoAimConstants.kRotation_kD);
+            tunableLeadTime = new TunableNumber("AutoAim/Lead Time (s)", AutoAimConstants.kLeadTimeSec);
         }
 
         m_rotationPID = new PIDController(
@@ -141,8 +145,20 @@ public class AutoAimAndShoot extends Command {
         if (m_isInOwnZone) {
             // 己方區域：瞄準己方 Hub
             m_targetPosition = AutoAimConstants.getHubPosition(isRed);
-            Translation2d toTarget = m_targetPosition.minus(robotPosition);
-            // atan2 計算「機器人→Hub」的場地角度，再加上射手安裝偏移
+
+            // ── 慣性補償 (Lead Compensation) ──
+            // 移動中射球時，球到達 Hub 需要飛行時間。
+            // 預測 leadTime 後機器人位置，從預測位置計算瞄準角度，
+            // 這樣球射出的方向在飛行後會命中 Hub。
+            ChassisSpeeds fieldVel = m_swerve.getFieldRelativeChassisSpeeds();
+            double leadTime = tunableLeadTime.get();
+            Translation2d predictedPosition = new Translation2d(
+                robotPosition.getX() + fieldVel.vxMetersPerSecond * leadTime,
+                robotPosition.getY() + fieldVel.vyMetersPerSecond * leadTime
+            );
+
+            Translation2d toTarget = m_targetPosition.minus(predictedPosition);
+            // atan2 計算「預測位置→Hub」的場地角度，再加上射手安裝偏移
             // 如果射手在背面（offset=π），機器人需要背對 Hub 才能射中
             targetAngleRad = Math.atan2(toTarget.getY(), toTarget.getX()) 
                 + AutoAimConstants.kShooterAngleOffsetRad;
