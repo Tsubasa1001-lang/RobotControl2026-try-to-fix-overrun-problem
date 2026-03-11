@@ -45,6 +45,11 @@ public class ShooterSubsystem extends SubsystemBase {
     private TunableNumber tunableKD;
     private TunableNumber tunableKS;
 
+    // ── 拋物線 RPS 曲線係數（可在 Shuffleboard 即時調參）──
+    private TunableNumber tunableRpsA;
+    private TunableNumber tunableRpsB;
+    private TunableNumber tunableRpsC;
+
     // ── Shuffleboard 遙測 ──
     private GenericEntry currentRpsEntry;
     private GenericEntry targetRpsEntry;
@@ -67,6 +72,9 @@ public class ShooterSubsystem extends SubsystemBase {
             tunableKI = new TunableNumber(tab, "kI", ShooterConstants.kDefaultKI);
             tunableKD = new TunableNumber(tab, "kD", ShooterConstants.kDefaultKD);
             tunableKS = new TunableNumber(tab, "kS", ShooterConstants.kDefaultKS);
+            tunableRpsA = new TunableNumber(tab, "RpsA", AutoAimConstants.kRpsA);
+            tunableRpsB = new TunableNumber(tab, "RpsB", AutoAimConstants.kRpsB);
+            tunableRpsC = new TunableNumber(tab, "RpsC", AutoAimConstants.kRpsC);
 
             // ── 遙測示波圖 ──
             currentRpsEntry = tab.add("Current RPS", 0)
@@ -90,6 +98,9 @@ public class ShooterSubsystem extends SubsystemBase {
             tunableKI = new TunableNumber("Shooter/kI", ShooterConstants.kDefaultKI);
             tunableKD = new TunableNumber("Shooter/kD", ShooterConstants.kDefaultKD);
             tunableKS = new TunableNumber("Shooter/kS", ShooterConstants.kDefaultKS);
+            tunableRpsA = new TunableNumber("Shooter/RpsA", AutoAimConstants.kRpsA);
+            tunableRpsB = new TunableNumber("Shooter/RpsB", AutoAimConstants.kRpsB);
+            tunableRpsC = new TunableNumber("Shooter/RpsC", AutoAimConstants.kRpsC);
         }
 
         TalonFXConfiguration config = new TalonFXConfiguration();
@@ -194,14 +205,15 @@ public class ShooterSubsystem extends SubsystemBase {
     /**
      * 根據距離計算目標 RPS（2 次多項式曲線擬合）。
      * <p>
-     * 公式: {@code RPS = kRpsA * d² + kRpsB * d + kRpsC}
+     * 公式: {@code RPS = RpsA * d² + RpsB * d + RpsC}
      * <p>
+     * 係數 RpsA/B/C 可在 Shuffleboard 即時調參。
      * 超出測量範圍 (1m~5m) 時 clamp 到邊界值，避免外推爆掉。
      *
      * @param distance 到目標的距離 (m)
      * @return 目標射手 RPS
      */
-    public static double interpolateRps(double distance) {
+    public double interpolateRps(double distance) {
         // 邊界安全：超出測量範圍直接回傳限制值
         if (distance <= AutoAimConstants.kRpsMinDistance) {
             return AutoAimConstants.kRpsMin;
@@ -210,10 +222,15 @@ public class ShooterSubsystem extends SubsystemBase {
             return AutoAimConstants.kRpsMax;
         }
 
+        // 從 Shuffleboard 讀取即時係數
+        double a = tunableRpsA.get();
+        double b = tunableRpsB.get();
+        double c = tunableRpsC.get();
+
         // 2 次多項式: RPS = A*d² + B*d + C
-        double rps = AutoAimConstants.kRpsA * distance * distance
-                   + AutoAimConstants.kRpsB * distance
-                   + AutoAimConstants.kRpsC;
+        double rps = a * distance * distance
+                   + b * distance
+                   + c;
 
         // 安全 clamp，防止曲線在邊界附近超出合理範圍
         return MathUtil.clamp(rps, AutoAimConstants.kRpsMin, AutoAimConstants.kRpsMax);

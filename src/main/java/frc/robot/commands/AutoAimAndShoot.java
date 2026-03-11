@@ -147,10 +147,10 @@ public class AutoAimAndShoot extends Command {
             targetAngleRad = Math.atan2(toTarget.getY(), toTarget.getX()) 
                 + AutoAimConstants.kShooterAngleOffsetRad;
         } else {
-            // 中立區：朝固定角度射回己方聯盟區
-            m_targetPosition = null; // 不需要目標點
-            targetAngleRad = AutoAimConstants.getReturnAngleRad(isRed) 
-                + AutoAimConstants.kShooterAngleOffsetRad;
+            // 中立區：機器人正面朝向己方聯盟區（不加射手偏移）
+            // 此時不需要精準瞄準，只需面向己方方向把球射回去
+            m_targetPosition = null;
+            targetAngleRad = AutoAimConstants.getReturnAngleRad(isRed);
         }
 
         // 3. 計算到目標的距離（己方區域用實際距離，中立區用估算）
@@ -271,6 +271,6 @@ public class AutoAimAndShoot extends Command {
      * @return 目標射手 RPS
      */
     private double interpolateRps(double distance) {
-        return ShooterSubsystem.interpolateRps(distance);
+        return m_shooter.interpolateRps(distance);
     }
 }

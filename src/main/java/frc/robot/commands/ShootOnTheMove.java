@@ -95,8 +95,8 @@ public class ShootOnTheMove extends Command {
                 + AutoAimConstants.kShooterAngleOffsetRad;
             distanceToTarget = toTarget.getNorm();
         } else {
-            targetAngleRad = AutoAimConstants.getReturnAngleRad(isRed)
-                + AutoAimConstants.kShooterAngleOffsetRad;
+            // 中立區：機器人正面朝向己方聯盟區（不加射手偏移）
+            targetAngleRad = AutoAimConstants.getReturnAngleRad(isRed);
             distanceToTarget = AutoAimConstants.getHubPosition(isRed).minus(robotPosition).getNorm();
         }
         targetAngleRad = MathUtil.angleModulus(targetAngleRad);
@@ -107,7 +107,7 @@ public class ShootOnTheMove extends Command {
         // 4. 依距離設定射手 RPS
         double targetRps;
         if (isInOwnZone) {
-            targetRps = ShooterSubsystem.interpolateRps(distanceToTarget);
+            targetRps = m_shooter.interpolateRps(distanceToTarget);
         } else {
             targetRps = AutoAimConstants.kMidFieldReturnRps;
         }

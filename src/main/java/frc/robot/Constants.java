@@ -102,14 +102,20 @@ public final class Constants {
     }
 
     /**
-     * 判斷機器人是否在己方場域
-     * 藍方己方在 X < kFieldMidX，紅方己方在 X > kFieldMidX
+     * 判斷機器人是否在己方射擊區域（Hub 後方，適合瞄準 Hub 射擊的區域）
+     * 
+     * 2026 REBUILT 場地：Hub 位於場地中央區域 (X ≈ 4.6m)，不在牆邊。
+     * 使用 Hub X 座標作為邊界，而非場地中線：
+     *   - 藍方：robotX < kHubX → 在 Hub 後方（靠近藍方牆壁）→ 可以瞄準 Hub
+     *   - 紅方：robotX > (fieldLength - kHubX) → 在 Hub 後方（靠近紅方牆壁）→ 可以瞄準 Hub
+     * 超過 Hub 位置後（進入中場區域）→ 切換為朝己方聯盟方向回傳
+     * 
      * @param robotX 機器人當前 X 座標 (m)
      * @param isRed 是否為紅方聯盟
-     * @return true = 在己方場域
+     * @return true = 在己方射擊區域（可瞄準 Hub）
      */
     public static boolean isInOwnZone(double robotX, boolean isRed) {
-      return isRed ? (robotX > kFieldMidX) : (robotX < kFieldMidX);
+      return isRed ? (robotX > (kFieldLengthMeters - kHubX)) : (robotX < kHubX);
     }
 
     // 旋轉 PID（控制底盤面向目標）
