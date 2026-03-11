@@ -128,6 +128,9 @@ public class RobotContainer {
 
         configureBindings();
         swerve.setDefaultCommand(manualDriveCommand);
+        // 射手整場不停機：沒有射擊指令時以待機速度 (kIdleRps) 持續旋轉
+        // 收到 AutoAimAndShoot / ShootOnTheMove 時會被接管，結束後自動回到 idle
+        shooterSubsystem.setDefaultCommand(shooterSubsystem.sys_idle());
         driverController.button(8).onTrue(Commands.runOnce(swerve::resetIMU)); // menu button
 
 
@@ -207,11 +210,11 @@ public class RobotContainer {
 
         // Drive2Tag：按住 A 鍵自動對位 AprilTag
         // 額外 require shooter + transport → 若 AutoAimAndShoot 正在運行會被自動取消
+        // 不停射手馬達（DefaultCommand sys_idle 會繼續待機旋轉）
         driverController.a().whileTrue(
             new Drive2Tag(swerve, Constants.kLimelightName, -1.15, 0.0, 0.0)
                 .alongWith(
                     Commands.runOnce(() -> {
-                        shooterSubsystem.stopShooter();
                         transport.stopTransport();
                     }, shooterSubsystem, transport)
                 )

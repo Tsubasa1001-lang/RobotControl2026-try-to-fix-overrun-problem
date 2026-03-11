@@ -262,9 +262,9 @@ public class AutoAimAndShoot extends Command {
 
     @Override
     public void end(boolean interrupted) {
-        // 停止所有動作
+        // 停止旋轉瞄準與送球，但不停射手馬達
+        // → Shooter 的 DefaultCommand (sys_idle) 會自動接管，以待機速度持續旋轉
         m_swerve.setAimSpeed(new edu.wpi.first.math.kinematics.ChassisSpeeds(0, 0, 0));
-        m_shooter.stopShooter();
         m_transport.stopTransport();
         m_isFeeding = false;
 

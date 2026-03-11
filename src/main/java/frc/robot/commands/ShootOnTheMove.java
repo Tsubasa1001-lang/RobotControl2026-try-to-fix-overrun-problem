@@ -91,10 +91,21 @@ public class ShootOnTheMove extends Command {
 
         if (isInOwnZone) {
             Translation2d hubPos = AutoAimConstants.getHubPosition(isRed);
-            Translation2d toTarget = hubPos.minus(robotPosition);
+
+            // ── 慣性補償 (Lead Compensation) ──
+            // 自動階段底盤仍在移動，需要根據場地速度預測未來位置來瞄準
+            ChassisSpeeds fieldVel = m_swerve.getFieldRelativeChassisSpeeds();
+            double leadTime = AutoAimConstants.kLeadTimeSec;
+            Translation2d predictedPosition = new Translation2d(
+                robotPosition.getX() + fieldVel.vxMetersPerSecond * leadTime,
+                robotPosition.getY() + fieldVel.vyMetersPerSecond * leadTime
+            );
+
+            Translation2d toTarget = hubPos.minus(predictedPosition);
             targetAngleRad = Math.atan2(toTarget.getY(), toTarget.getX())
                 + AutoAimConstants.kShooterAngleOffsetRad;
-            distanceToTarget = toTarget.getNorm();
+            // 距離仍用實際位置計算（RPS 取決於球發射瞬間的真實距離）
+            distanceToTarget = hubPos.minus(robotPosition).getNorm();
         } else {
             // 中立區：機器人正面朝向己方聯盟區（不加射手偏移）
             targetAngleRad = AutoAimConstants.getReturnAngleRad(isRed);
@@ -149,7 +160,7 @@ public class ShootOnTheMove extends Command {
         // ── 歸還旋轉控制權給 PathPlanner ──
         PPHolonomicDriveController.setRotationTargetOverride(() -> Optional.empty());
 
-        m_shooter.stopShooter();
+        // 不停射手馬達 → DefaultCommand (sys_idle) 會自動接管待機旋轉
         m_transport.stopTransport();
         m_totalTimer.stop();
         m_feedTimer.stop();

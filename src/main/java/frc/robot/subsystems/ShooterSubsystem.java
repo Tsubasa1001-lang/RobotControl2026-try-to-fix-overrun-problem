@@ -185,6 +185,18 @@ public class ShooterSubsystem extends SubsystemBase {
     }
 
     /**
+     * 待機旋轉 Command（設為 DefaultCommand 使用）。
+     * 整場比賽射手馬達不停機，以 kIdleRps 持續旋轉，
+     * 收到射擊指令時只需微調轉速，大幅縮短達速時間。
+     * 
+     * @return 持續以待機速度旋轉的 Command
+     */
+    public Command sys_idle() {
+        return this.run(() -> setVelocity(ShooterConstants.kIdleRps))
+            .withName("ShooterIdle");
+    }
+
+    /**
      * 檢查目前轉速是否達到目標 (允許一點點誤差)
      * @param targetRps 目標轉速
      * @param tolerance 容許誤差

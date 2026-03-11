@@ -31,11 +31,11 @@ public final class Constants {
   public static final class LimelightConstants {
     // ── 安裝位置（機器人座標系）──
     // ⚠️ 請用捲尺實際量測後修改！
-    public static final double kForwardMeters = 0.30;   // 鏡頭距機器人中心往前 (m)
-    public static final double kSideMeters    = 0.00;   // 鏡頭距機器人中心往左 (m)，右為負
-    public static final double kUpMeters      = 0.50;   // 鏡頭距地面高度 (m)
+    public static final double kForwardMeters = -0.17;   // 鏡頭距機器人中心往前 (m)
+    public static final double kSideMeters    = 0.23;   // 鏡頭距機器人中心往左 (m)，右為負
+    public static final double kUpMeters      = 0.52;   // 鏡頭距地面高度 (m)
     public static final double kRollDegrees   = 0.0;    // 繞前後軸旋轉 (deg)
-    public static final double kPitchDegrees  = 25.0;   // 鏡頭仰角 (deg)，向上為正
+    public static final double kPitchDegrees  = 60.0;   // 鏡頭仰角 (deg)，向上為正
     public static final double kYawDegrees    = 0.0;    // 鏡頭水平旋轉 (deg)，向左為正
 
     // ── 視覺融合過濾閾值 ──
@@ -54,7 +54,7 @@ public final class Constants {
   // Dashboard 更新頻率 = 50Hz / kTelemetryDivider
   // 5 → 每 5 個週期更新一次 = 10Hz (100ms)，人眼足夠
   // 比賽時可改更大值（如 10 → 5Hz）進一步減輕網路負擔
-  public static final int kTelemetryDivider = 5;
+  public static final int kTelemetryDivider = 10;
 
   // ===== 自動瞄準射擊相關常數 =====
   // 2026 REBUILT: 射入 Hub 得分（Fuel 遊戲物件）
@@ -119,10 +119,10 @@ public final class Constants {
     }
 
     // 旋轉 PID（控制底盤面向目標）
-    public static final double kRotation_kP = 5.0;
+    public static final double kRotation_kP = 4.0;
     public static final double kRotation_kI = 0.0;
     public static final double kRotation_kD = 0.1;
-    public static final double kRotationToleranceDeg = 10.0; // 角度容許誤差 (度)
+    public static final double kRotationToleranceDeg = 8.0; // 角度容許誤差 (度)
 
     // ── 距離 → 射手 RPS 多項式曲線擬合 ──
     // 由實際測量 8 個數據點 (1m~5m) 做 2 次多項式迴歸得出：
@@ -134,15 +134,15 @@ public final class Constants {
     //   3.0m→55, 3.5m→60, 4.0m→65, 5.0m→70
     //
     // ⚠️ 如果更換射手機構或重新測量，請用 fit_rps.py 重新擬合係數！
-    public static final double kRpsA = -0.686275; // d² 係數
-    public static final double kRpsB = 13.186275; // d  係數
-    public static final double kRpsC = 21.911765; // 常數項
+    public static final double kRpsA = 1.165; // d² 係數
+    public static final double kRpsB = 1.5734; // d  係數
+    public static final double kRpsC = 35.2156; // 常數項
 
     // 安全限制：超出測量範圍時 clamp 到邊界值
     public static final double kRpsMinDistance = 1.0;  // 最近測量距離 (m)
     public static final double kRpsMaxDistance = 5.0;  // 最遠測量距離 (m)
     public static final double kRpsMin = 35.0;         // 最低 RPS（對應最近距離）
-    public static final double kRpsMax = 70.0;         // 最高 RPS（對應最遠距離）
+    public static final double kRpsMax = 75.0;         // 最高 RPS（對應最遠距離）
 
     // 射手速度容許誤差 (RPS)
     public static final double kShooterToleranceRps = 8.0;
@@ -175,7 +175,7 @@ public final class Constants {
     // 如果射手出口在機器人正後方（-X 方向），設為 Math.PI
     // 如果射手出口在其他角度，填入相應弧度值
     // ⚠️ 請根據實際機器人射手安裝方向設定！
-    public static final double kShooterAngleOffsetRad = Math.PI; // TODO: 確認射手方向（假設射手在背面）
+    public static final double kShooterAngleOffsetRad = 0; // TODO: 確認射手方向（假設射手在背面）
   }
 
   public static class OperatorConstants {
@@ -198,6 +198,12 @@ public final class Constants {
 
     // ── 其他 ──
     public static final double kTriggerDeadband = 0.05;
+
+    // ── 待機轉速 (Idle) ──
+    // 整場比賽射手不停機，沒有瞄準指令時以此速度待命，
+    // 收到射擊 Command 時只需微調速度即可快速達標。
+    // 取 kRpsMin (35) 與 kRpsMax (75) 的中間值 = 55 RPS
+    public static final double kIdleRps = 55.0;
   }
 
   // ===== 輸送帶 (Transport) 常數 =====
@@ -207,9 +213,9 @@ public final class Constants {
     public static final int kTransportMotorID = 30;
 
     // ── 速度目標 (RPS) ──
-    public static final double kTransportRps = 35.0;       // 輸送帶正常速度
+    public static final double kTransportRps = -35.0;       // 輸送帶正常速度
     public static final double kUpToShootRps = 80.0;       // 上膛推球速度
-    public static final double kSlowTransportRps = 18.0;   // 慢速輸送帶 (Intake 時)
+    public static final double kSlowTransportRps = 25.0;   // 慢速輸送帶 (Intake 時)
 
     // ── PID 初始值 (Slot 0, VelocityVoltage) ──
     public static final double kDefaultKV = 0.12;
@@ -230,7 +236,7 @@ public final class Constants {
 
     // ── 速度目標 (RPS) ──
     public static final double kIntakeTargetRps = 60.0;
-    public static final double kOuttakeTargetRps = -30.0;
+    public static final double kOuttakeTargetRps = -70.0;
 
     // ── PID 初始值 (Slot 0, VelocityVoltage) ──
     public static final double kDefaultKV = 0.12;
