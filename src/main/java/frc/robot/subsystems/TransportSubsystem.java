@@ -6,6 +6,7 @@ import com.ctre.phoenix6.hardware.TalonFX;
 import com.ctre.phoenix6.signals.InvertedValue;
 import com.ctre.phoenix6.signals.NeutralModeValue;
 
+import edu.wpi.first.wpilibj.Timer;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.SubsystemBase;
 import frc.robot.Constants.TransportConstants;
@@ -128,6 +129,41 @@ public class TransportSubsystem extends SubsystemBase {
         );
     }
     
+    /**
+     * Intake 專用：transport 正轉吸球，up_to_shoot 反轉擋球（防止球直接衝進射手）
+     * 在自動吸球時呼叫此方法取代 runTransport()
+     */
+    public void runIntakeMode() {
+        transport.setControl(transportRequest.withVelocity(TransportConstants.kTransportRps));
+        up_to_shoot.setControl(upToShootRequest.withVelocity(-TransportConstants.kUpToShootRps));
+    }
+
+    /**
+     * 只啟動 up_to_shoot 推球到射手（transport 不動）
+     * 用於準備好球後將球推入射手的階段
+     */
+    public void runUpToShootOnly() {
+        up_to_shoot.setControl(upToShootRequest.withVelocity(TransportConstants.kUpToShootRps));
+    }
+
+    /**
+     * Auto 專用：up_to_shoot 正轉推球 N 秒後自動結束，transport 同步正轉
+     * 射手應已在 sys_idle 或更高速度待命
+     *
+     * @param seconds 推球持續時間 (s)
+     * @return Command，結束後 transport 與 up_to_shoot 同時停止
+     */
+    public Command sys_upToShootForSeconds(double seconds) {
+        Timer timer = new Timer();
+        return this.run(() -> {
+                runTransport(); // transport + up_to_shoot 同時正轉送球
+            })
+            .beforeStarting(() -> timer.restart())
+            .until(() -> timer.hasElapsed(seconds))
+            .finallyDo(() -> stopTransport())
+            .withName("UpToShoot " + seconds + "s");
+    }
+
     /**
      * (選配) 反轉吐球的 Command
      */

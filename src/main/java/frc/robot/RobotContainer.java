@@ -76,27 +76,27 @@ public class RobotContainer {
         
         // ═══════════════ PathPlanner NamedCommands ═══════════════
 
-        // "Start Intake"：開始吸球（與手操板機相同邏輯）
-        //   → PathPlanner parallel 使用：邊走邊吸球，路徑跑完才停
-        //   → PathPlanner sequential 使用：停下吸球，吸完再繼續
+        // "Start Intake"：吸球 + up_to_shoot 反轉擋球（防止球衝入射手）
+        //   → parallel 使用：邊走邊吸球
+        //   → sequential 使用：停下吸球
         NamedCommands.registerCommand("Start Intake", 
-            intakeRoller.sys_intakeWithTrigger()
+            intakeRoller.sys_intakeWithTrigger(transport)
         );
 
-        // "Stop Intake"：立即停止吸球（放在路徑結束或需要停下的地方）
+        // "Stop Intake"：立即停止吸球與 up_to_shoot
         NamedCommands.registerCommand("Stop Intake", 
-            intakeRoller.runOnce(() -> intakeRoller.stop())
+            intakeRoller.runOnce(() -> {
+                intakeRoller.stop();
+                transport.stopTransport();
+            })
         );
 
-        // "Shoot 2s"：定點射擊 2 秒後自動結束
-        //   → 以最高速度 (kRpsMax) 啟動射手 + transport，2 秒後停止 transport，
-        //     射手回到待機轉速 (sys_idle DefaultCommand 自動接管)
-        //   → 建議放在路徑結束後（sequential），讓機器人停下來射擊
-        //   ⚠ 如果想要不同時間，直接在 PathPlanner GUI 裡複製這個並修改名稱，
-        //     再於 RobotContainer 多加一行對應的 registerCommand
-        NamedCommands.registerCommand("Shoot 2s",
-            shooterSubsystem.sys_shootForSeconds(
-                AutoAimConstants.kRpsMax, transport, 2.0)
+        // "UpToShoot 2s"：up_to_shoot + transport 正轉推球 2 秒後自動結束
+        //   射手應已在比賽開始時啟動到待機轉速（sys_idle DefaultCommand）
+        //   建議放在路徑結束後（sequential），讓機器人停下來射擊
+        //   ⚠ 如需不同秒數，複製並修改秒數後再加一行 registerCommand
+        NamedCommands.registerCommand("UpToShoot 2s",
+            transport.sys_upToShootForSeconds(2.0)
         );
             
             
@@ -262,9 +262,10 @@ public class RobotContainer {
 
         // 當左板機按壓超過 0.1 時，啟動 sys_intakeWithTrigger 指令
         // 放開後自動停止
+        // 當左板機按壓超過 0.1 時，啟動吸球：IntakeRoller 正轉 + up_to_shoot 反轉擋球
+        // 放開後兩者同時停止
         driverController.leftTrigger(0.1).whileTrue(
-            intakeRoller.sys_intakeWithTrigger()
-            // intakeRoller.sys_intakeWithTrigger(() -> driverController.getLeftTriggerAxis())
+            intakeRoller.sys_intakeWithTrigger(transport)
         );
 
         // transport
