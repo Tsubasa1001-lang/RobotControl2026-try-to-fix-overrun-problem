@@ -197,6 +197,31 @@ public class ShooterSubsystem extends SubsystemBase {
     }
 
     /**
+     * 定點定時射擊 Command（Auto 用）。
+     * 立即以全速啟動射手，同時啟動 transport 送球，
+     * 持續指定秒數後結束（結束後 DefaultCommand sys_idle 自動接管）。
+     *
+     * @param rps      射手目標轉速 (rotations per second)
+     * @param transport 輸送帶 subsystem（同時控制）
+     * @param seconds  持續射擊時間 (s)
+     * @return 定時射擊 Command
+     */
+    public Command sys_shootForSeconds(double rps, TransportSubsystem transport, double seconds) {
+        return this.startEnd(
+            () -> {
+                setVelocity(rps);
+                transport.runTransport();
+            },
+            () -> {
+                // 結束後停止 transport，射手讓 DefaultCommand 接管回 idle
+                transport.stopTransport();
+            }
+        )
+        .withTimeout(seconds)
+        .withName("ShootForSeconds");
+    }
+
+    /**
      * 檢查目前轉速是否達到目標 (允許一點點誤差)
      * @param targetRps 目標轉速
      * @param tolerance 容許誤差

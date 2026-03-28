@@ -9,7 +9,6 @@ import frc.robot.Constants.AutoAimConstants;
 import frc.robot.commands.Drive2Tag;
 import frc.robot.commands.ManualDrive;
 import frc.robot.commands.AutoAimAndShoot;
-import frc.robot.commands.ShootOnTheMove;
 import frc.robot.subsystems.IntakeArmSubsystem;
 import frc.robot.subsystems.IntakeRollerSubsystem;
 import frc.robot.subsystems.Swerve;
@@ -76,21 +75,28 @@ public class RobotContainer {
         swerve.setupShuffleboardTab(shuffleboardManager.getSwerveTab());
         
         // ═══════════════ PathPlanner NamedCommands ═══════════════
-        // "Auto Aim Shoot"：邊走邊瞄準射擊
-        //   使用 PPHolonomicDriveController.setRotationTargetOverride() 覆寫旋轉
-        //   PathPlanner 繼續控制 XY 平移，此 Command 接管旋轉 + 射手 + 送球
-        //   可與路徑平行執行（邊跑邊射）或路徑結束後執行（停下射擊）
-        NamedCommands.registerCommand("Auto Aim Shoot",
-            new ShootOnTheMove(swerve, shooterSubsystem, transport));
 
-        // "Start Intake"：開始吸球（與手操左板機相同）
+        // "Start Intake"：開始吸球（與手操板機相同邏輯）
+        //   → PathPlanner parallel 使用：邊走邊吸球，路徑跑完才停
+        //   → PathPlanner sequential 使用：停下吸球，吸完再繼續
         NamedCommands.registerCommand("Start Intake", 
             intakeRoller.sys_intakeWithTrigger()
         );
 
-        // "Stop Intake"：停止吸球
+        // "Stop Intake"：立即停止吸球（放在路徑結束或需要停下的地方）
         NamedCommands.registerCommand("Stop Intake", 
             intakeRoller.runOnce(() -> intakeRoller.stop())
+        );
+
+        // "Shoot 2s"：定點射擊 2 秒後自動結束
+        //   → 以最高速度 (kRpsMax) 啟動射手 + transport，2 秒後停止 transport，
+        //     射手回到待機轉速 (sys_idle DefaultCommand 自動接管)
+        //   → 建議放在路徑結束後（sequential），讓機器人停下來射擊
+        //   ⚠ 如果想要不同時間，直接在 PathPlanner GUI 裡複製這個並修改名稱，
+        //     再於 RobotContainer 多加一行對應的 registerCommand
+        NamedCommands.registerCommand("Shoot 2s",
+            shooterSubsystem.sys_shootForSeconds(
+                AutoAimConstants.kRpsMax, transport, 2.0)
         );
             
             
